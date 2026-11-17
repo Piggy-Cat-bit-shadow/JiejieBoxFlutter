@@ -113,8 +113,9 @@ class JjboxHost(
         if (profile.revision != profileRevision) {
             return error("revision_mismatch", "profile revision changed", true)
         }
+        val content = if (mode == "vpn") withTunInbound(profile.content) else profile.content
         return runCatching {
-            JjboxCore.checkConfig(profile.content)
+            JjboxCore.checkConfig(content)
             if (mode == "vpn") {
                 if (!JjboxCore.isLoaded) {
                     return error("core_unavailable", "libbox AAR is not linked into this build", false)
@@ -126,7 +127,7 @@ class JjboxHost(
                 }
                 activeId = profile.id
                 activeRevision = profile.revision
-                activeContent = profile.content
+                activeContent = content
                 activeMode = mode
                 if (prepare != null) {
                     prepare.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -137,7 +138,7 @@ class JjboxHost(
                 context.startService(
                     JjboxVpnService.intent(context, JjboxVpnService.ACTION_START)
                         .putExtra(JjboxVpnService.EXTRA_MODE, mode)
-                        .putExtra(JjboxVpnService.EXTRA_CONFIG, profile.content),
+                        .putExtra(JjboxVpnService.EXTRA_CONFIG, content),
                 )
                 emit(stateEvent())
                 return ok(JSONObject().put("accepted", true).put("revision", revision))
@@ -148,7 +149,7 @@ class JjboxHost(
             val wasRunning = JjboxCore.isRunning()
             val previous = activeContent
             try {
-                JjboxCore.startService(profile.content)
+                JjboxCore.startService(content)
             } catch (failure: CoreException) {
                 if (wasRunning && previous != null) {
                     runCatching { JjboxCore.startService(previous) }
@@ -163,7 +164,7 @@ class JjboxHost(
             lifetime.runtimeReport(true, revision)
             activeId = profile.id
             activeRevision = profile.revision
-            activeContent = profile.content
+            activeContent = content
             activeMode = mode
             emit(stateEvent())
             ok(JSONObject().put("accepted", true).put("revision", revision))
@@ -372,13 +373,14 @@ class JjboxHost(
         if (profile.revision != expectedRevision) {
             return error("revision_mismatch", "profile revision changed", true)
         }
+        val content = if (activeMode == "vpn") withTunInbound(profile.content) else profile.content
         return runCatching {
-            JjboxCore.checkConfig(profile.content)
+            JjboxCore.checkConfig(content)
             val previous = activeContent
             val wasRunning = JjboxCore.isRunning()
             if (wasRunning) {
                 try {
-                    JjboxCore.startService(profile.content)
+                    JjboxCore.startService(content)
                 } catch (failure: CoreException) {
                     if (previous != null) {
                         runCatching { JjboxCore.startService(previous) }
@@ -399,7 +401,7 @@ class JjboxHost(
             }
             activeId = profile.id
             activeRevision = profile.revision
-            activeContent = profile.content
+            activeContent = content
             emit(stateEvent())
             ok(
                 JSONObject()
@@ -429,6 +431,46 @@ class JjboxHost(
 
     private fun decodedContent(args: JSONObject): String =
         String(Base64.decode(args.optString("content"), Base64.NO_WRAP))
+
+    /**
+     * A profile written on desktop may only have a mixed inbound. The Android
+     * VPN path needs a tun inbound for the service to capture traffic; add one
+     * without discarding the rest of the document.
+     */
+    private fun withTunInbound(content: String): String {
+        return try {
+            val root = JSONObject(content)
+            val inbounds = root.optJSONArray("inbounds") ?: JSONArray()
+            var hasTun = false
+            for (index in 0 until inbounds.length()) {
+                if (inbounds.optJSONObject(index)?.optString("type") == "tun") {
+                    hasTun = true
+                    break
+                }
+            }
+            if (!hasTun) {
+                inbounds.put(
+                    JSONObject()
+                        .put("type", "tun")
+                        .put("tag", "tun-in")
+                        .put("address", JSONArray().put("198.18.0.1/30"))
+                        .put("mtu", 9000)
+                        .put("auto_route", true)
+                        .put("strict_route", false)
+                        .put("stack", "mixed"),
+                )
+                root.put("inbounds", inbounds)
+            }
+            val route = root.optJSONObject("route")
+            if (route != null && !route.has("auto_detect_interface")) {
+                route.put("auto_detect_interface", true)
+                root.put("route", route)
+            }
+            root.toString()
+        } catch (_: Exception) {
+            content
+        }
+    }
 
     private fun readMeta(id: String): JSONObject? {
         val file = File(profilesDir, "$id.meta.json")
