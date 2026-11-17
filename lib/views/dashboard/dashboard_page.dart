@@ -85,6 +85,17 @@ class _CoreStatusStrip extends StatelessWidget {
                 _label(connection.state),
                 style: AppTextStyle.subheadline.of(context, emphasized: true),
               ),
+              trailing: connection.isAvailable
+                  ? TonalButton(
+                      size: TonalButtonSize.section,
+                      label: connection.state == CoreServiceState.running
+                          ? 'Stop'
+                          : 'Start',
+                      onPressed: () => connection.state == CoreServiceState.running
+                          ? connection.stop()
+                          : connection.start(),
+                    )
+                  : null,
               subtitle: connection.reason == null
                   ? null
                   : Text(

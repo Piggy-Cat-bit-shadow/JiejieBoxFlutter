@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 
 import '../../common/context.dart';
+import '../../core/core_bridge.dart';
 import '../../state/app_state.dart';
 import '../../ui/icons/app_glyphs.dart';
 import '../../features/import/default_template.dart';
@@ -47,10 +48,19 @@ class AddProfileMenu extends StatelessWidget {
       ImportSource.clipboard => 'clipboard',
       ImportSource.template => 'template',
     };
+    var validation = 'unvalidated';
+    try {
+      final result = await state.connection.checkConfig(draft.text);
+      validation = result['valid'] == true ? 'validated' : 'invalid';
+    } on BridgeException catch (error) {
+      validation = 'unvalidated (check unavailable: ${error.code})';
+    }
+    if (!context.mounted) {
+      return;
+    }
     state.addProfileDraft(
       label: draft.label,
-      subtitle:
-          '$sourceLabel · ${draft.nodeCount} nodes · unvalidated',
+      subtitle: '$sourceLabel · ${draft.nodeCount} nodes · $validation',
       content: draft.text,
     );
     state.noteAddIntent('${source.name}:${draft.format.name}');
