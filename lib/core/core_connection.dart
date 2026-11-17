@@ -129,7 +129,7 @@ class CoreConnection extends ChangeNotifier {
   Future<bool> start({
     String? profileId,
     String? profileRevision,
-    String mode = 'vpn',
+    String? mode,
   }) async {
     final bridge = host;
     if (bridge != null) {
@@ -137,11 +137,13 @@ class CoreConnection extends ChangeNotifier {
         _set(CoreServiceState.failed, reason: 'no profile selected');
         return false;
       }
+      final String resolvedMode =
+          mode ?? (Platform.isWindows ? 'proxy' : 'vpn');
       _set(CoreServiceState.starting);
       try {
         final ack = await bridge.start(
           revision: _revision,
-          mode: mode,
+          mode: resolvedMode,
           profileId: profileId,
           profileRevision: profileRevision,
         );
@@ -242,6 +244,7 @@ class CoreConnection extends ChangeNotifier {
     id: id,
     revision: revision,
     requestId: '${DateTime.now().microsecondsSinceEpoch}',
+    mode: Platform.isWindows ? 'proxy' : 'vpn',
   );
 
   Future<jb.ProviderRefreshResult> refreshProviders(List<String> tags) =>

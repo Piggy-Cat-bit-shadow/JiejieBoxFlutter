@@ -18,6 +18,13 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
   private var coreLinked: Bool { false }
 
   override func startTunnel(options: [String: NSObject]?) async throws {
+    guard coreLinked else {
+      throw NSError(
+        domain: "JiejieBox",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "libbox is not linked into the Network Extension"]
+      )
+    }
     let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
     settings.mtu = 9000
     let ipv4 = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.255.255.252"])
@@ -25,14 +32,12 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
     settings.ipv4Settings = ipv4
     settings.dnsSettings = NEDNSSettings(servers: ["198.18.0.2"])
     try await setTunnelNetworkSettings(settings)
-    // TODO(P1): libbox.Setup + CommandServer.StartOrReloadService(configContent).
   }
 
   override func stopTunnel(with reason: NEProviderStopReason) async {
     lock.lock()
     generation &+= 1
     lock.unlock()
-    // TODO(P1): CommandServer.CloseService() then Close().
   }
 
   override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
@@ -55,29 +60,35 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
       if envelope.contains("service.status") {
         return Self.okEnvelope(
           result: [
-            "state": "idle",
+            "state": "failed",
             "revision": 0,
             "mode": "vpn",
-            "tunActive": true,
-            "permission": "granted",
+            "tunActive": false,
+            "permission": "unrequested",
+            "lastError": [
+              "code": "core_unavailable",
+              "message": "libbox is not linked into the extension",
+              "retryable": false,
+            ],
           ]
         )
       }
       if envelope.contains("host.capabilities") {
         return Self.okEnvelope(result: [
           "core": false,
-          "tun": true,
+          "tun": false,
           "systemProxy": false,
-          "perAppProxy": true,
+          "perAppProxy": false,
           "autostart": false,
           "tray": false,
           "qrCamera": false,
           "qrImageDecode": false,
           "fileImport": true,
           "clipboardWatch": true,
-          "notifications": true,
-          "deepLink": true,
-          "memoryPressure": true,
+          "notifications": false,
+          "deepLink": false,
+          "events": false,
+          "memoryPressure": false,
           "serviceModes": ["vpn"],
         ])
       }
@@ -101,7 +112,7 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
       // answer is a capability answer, not "the core is stopped".
       return Self.errorEnvelope(code: "unsupported_platform", message: "libbox is not linked into the extension")
     }
-    return Self.errorEnvelope(code: "unsupported_platform", message: "not implemented")
+    return Self.errorEnvelope(code: "unsupported_platform", message: "core request handling is not wired")
   }
 
   static func okEnvelope(result: [String: Any]) -> String {

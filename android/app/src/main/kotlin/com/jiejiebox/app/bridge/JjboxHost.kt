@@ -3,6 +3,7 @@ package com.jiejiebox.app.bridge
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -19,6 +20,9 @@ class JjboxHost(
 ) {
     private val lifetime = JjboxLifetime()
     private val profilesDir = File(context.filesDir, "profiles").apply { mkdirs() }
+    private var activeId: String? = null
+    private var activeRevision: String? = null
+    private var activeContent: String? = null
 
     fun detach() = Unit
 
@@ -42,18 +46,19 @@ class JjboxHost(
             ok(JSONObject())
         }
         "host.shutdown" -> {
-            context.startService(JjboxVpnService.intent(context, JjboxVpnService.ACTION_STOP))
+            runCatching { JjboxCore.stopService() }
             lifetime.close(lifetime.revision + 1)
+            lifetime.runtimeReport(false, lifetime.revision)
             ok(JSONObject())
         }
         "service.start" -> serviceStart(args)
         "service.stop" -> serviceStop(args)
         "service.status" -> ok(status())
-        "config.check" -> coreCall { JjboxCore.checkConfig(args.optString("content")) }
-        "config.format" -> coreCall { JjboxCore.formatConfig(args.optString("content")) }
+        "config.check" -> coreCall { JjboxCore.checkConfig(decodedContent(args)) }
+        "config.format" -> coreCall { JjboxCore.formatConfig(decodedContent(args)) }
         "config.preview" -> {
             if (!JjboxCore.isLoaded) error("unsupported_platform", "ParsePreview is not in this build", false)
-            else coreCall { JjboxCore.preview(args.optString("content")) }
+            else coreCall { JjboxCore.preview(decodedContent(args)) }
         }
         "profile.list" -> ok(profileList())
         "profile.read" -> profileRead(args)
@@ -84,33 +89,72 @@ class JjboxHost(
     private fun serviceStart(args: JSONObject): JSONObject {
         val revision = args.optInt("revision", 0)
         val mode = args.optString("mode", "proxy")
-        val needsPermission = mode == "vpn"
-        val outcome = lifetime.start(revision, needsPermission)
-        if (outcome == "pending") {
-            context.startService(
-                JjboxVpnService.intent(context, JjboxVpnService.ACTION_START)
-                    .putExtra(JjboxVpnService.EXTRA_MODE, mode),
-            )
-            emit(stateEvent())
+        if (mode != "proxy") {
+            return error("unsupported_platform", "this build only exposes proxy mode", false)
         }
-        return ok(JSONObject().put("accepted", outcome != "rejected:closed").put("revision", revision))
+        val id = args.optString("profileId")
+        val profileRevision = args.optString("profileRevision")
+        val profile = readProfile(id) ?: return error("profile_not_found", "profile not found: $id", false)
+        if (profile.revision != profileRevision) {
+            return error("revision_mismatch", "profile revision changed", true)
+        }
+        return runCatching {
+            JjboxCore.checkConfig(profile.content)
+            val wasRunning = JjboxCore.isRunning()
+            val previous = activeContent
+            try {
+                JjboxCore.startService(profile.content)
+            } catch (failure: CoreException) {
+                if (wasRunning && previous != null) {
+                    runCatching { JjboxCore.startService(previous) }
+                }
+                return error(failure.code, failure.message, true)
+            }
+            val outcome = lifetime.start(revision, false)
+            if (outcome == "rejected:closed") {
+                JjboxCore.stopService()
+                return error("closed", "host is shutting down", false)
+            }
+            lifetime.runtimeReport(true, revision)
+            activeId = profile.id
+            activeRevision = profile.revision
+            activeContent = profile.content
+            emit(stateEvent())
+            ok(JSONObject().put("accepted", true).put("revision", revision))
+        }.getOrElse { failure ->
+            if (failure is CoreException) error(failure.code, failure.message, true)
+            else error("core_start_failed", failure.message ?: "core start failed", true)
+        }
     }
 
     private fun serviceStop(args: JSONObject): JSONObject {
         val revision = args.optInt("revision", 0)
         val outcome = lifetime.stop(revision)
-        if (outcome == "pending") {
-            context.startService(JjboxVpnService.intent(context, JjboxVpnService.ACTION_STOP))
-            emit(stateEvent())
+        if (outcome == "rejected:stale_revision") {
+            return error("stale_revision", "revision is older than the last accepted intent", false)
         }
-        return ok(JSONObject().put("accepted", outcome != "rejected:closed").put("revision", revision))
+        if (outcome == "rejected:closed") {
+            return error("closed", "host is shutting down", false)
+        }
+        return runCatching {
+            JjboxCore.stopService()
+            lifetime.runtimeReport(false, revision)
+            emit(stateEvent())
+            ok(JSONObject().put("accepted", true).put("revision", revision))
+        }.getOrElse { failure ->
+            lifetime.failPending(failure.message ?: "stop failed")
+            if (failure is CoreException) error(failure.code, failure.message, true)
+            else error("core_stop_failed", failure.message ?: "core stop failed", true)
+        }
     }
 
     private fun status(): JSONObject = lifetime.statusJson()
         .put("sinceMillis", 0)
         .put("mode", "proxy")
-        .put("tunActive", lifetime.state == JjboxLifetime.State.RUNNING)
+        .put("tunActive", false)
         .put("permission", if (JjboxCore.vpnPermissionGranted) "granted" else "unrequested")
+        .put("profileId", activeId ?: JSONObject.NULL)
+        .put("profileRev", activeRevision ?: JSONObject.NULL)
 
     private fun stateEvent(): JSONObject = JSONObject()
         .put("type", "service.state")
@@ -122,19 +166,20 @@ class JjboxHost(
 
     private fun capabilities(): JSONObject = JSONObject()
         .put("core", JjboxCore.isLoaded)
-        .put("tun", true)
+        .put("tun", false)
         .put("systemProxy", false)
-        .put("perAppProxy", true)
+        .put("perAppProxy", false)
         .put("autostart", false)
         .put("tray", false)
         .put("qrCamera", JjboxCore.hasCameraScanner)
-        .put("qrImageDecode", true)
-        .put("fileImport", true)
+        .put("qrImageDecode", false)
+        .put("fileImport", false)
         .put("clipboardWatch", true)
-        .put("notifications", true)
-        .put("deepLink", true)
-        .put("memoryPressure", true)
-        .put("serviceModes", JSONArray().put("vpn").put("proxy"))
+        .put("notifications", false)
+        .put("deepLink", false)
+        .put("memoryPressure", false)
+        .put("events", false)
+        .put("serviceModes", JSONArray().put("proxy"))
 
     /**
      * Reads the clipboard only. Promotion still requires an explicit user action and
@@ -246,18 +291,63 @@ class JjboxHost(
         return ok(JSONObject())
     }
 
-    private fun profileApply(args: JSONObject): JSONObject {
-        val id = args.optString("id")
-        val meta = readMeta(id) ?: return error("invalid_argument", "no such profile $id", false)
-        val outcome = lifetime.start(args.optInt("revision", 0), true)
-        emit(stateEvent())
-        return ok(
-            JSONObject()
-                .put("applied", outcome != "rejected:closed")
-                .put("requestId", args.optString("requestId"))
-                .put("coreMessage", "revision ${meta.optString("revision")}"),
+    private fun profileApply(args: JSONObject): JSONObject {        val id = args.optString("id")
+        val expectedRevision = args.optString("revision")
+        val profile = readProfile(id) ?: return error("profile_not_found", "profile not found: $id", false)
+        if (profile.revision != expectedRevision) {
+            return error("revision_mismatch", "profile revision changed", true)
+        }
+        return runCatching {
+            JjboxCore.checkConfig(profile.content)
+            val previous = activeContent
+            val wasRunning = JjboxCore.isRunning()
+            try {
+                JjboxCore.startService(profile.content)
+            } catch (failure: CoreException) {
+                if (wasRunning && previous != null) {
+                    runCatching { JjboxCore.startService(previous) }
+                }
+                return error(failure.code, failure.message, true)
+            }
+            val nextRevision = lifetime.revision + 1
+            val outcome = lifetime.start(nextRevision, false)
+            if (outcome == "rejected:closed") {
+                JjboxCore.stopService()
+                return error("closed", "host is shutting down", false)
+            }
+            lifetime.runtimeReport(true, nextRevision)
+            activeId = profile.id
+            activeRevision = profile.revision
+            activeContent = profile.content
+            emit(stateEvent())
+            ok(
+                JSONObject()
+                    .put("applied", true)
+                    .put("requestId", args.optString("requestId"))
+                    .put("coreMessage", "revision ${profile.revision}")
+                    .put("switchedAtMillis", System.currentTimeMillis()),
+            )
+        }.getOrElse { failure ->
+            if (failure is CoreException) error(failure.code, failure.message, true)
+            else error("core_start_failed", failure.message ?: "core start failed", true)
+        }
+    }
+
+    private data class ProfileDocument(val id: String, val revision: String, val content: String)
+
+    private fun readProfile(id: String): ProfileDocument? {
+        val meta = readMeta(id) ?: return null
+        val body = File(profilesDir, "$id.json")
+        if (!body.exists()) return null
+        return ProfileDocument(
+            id = id,
+            revision = meta.optString("revision"),
+            content = String(body.readBytes()),
         )
     }
+
+    private fun decodedContent(args: JSONObject): String =
+        String(Base64.decode(args.optString("content"), Base64.NO_WRAP))
 
     private fun readMeta(id: String): JSONObject? {
         val file = File(profilesDir, "$id.meta.json")
@@ -269,7 +359,13 @@ class JjboxHost(
         if (!JjboxCore.isLoaded) {
             return error("unsupported_platform", "libbox is not linked into this build", false)
         }
-        return runCatching(block).getOrElse { error("core_start_failed", it.message ?: "core failure", true) }
+        return runCatching(block).getOrElse { failure ->
+            if (failure is CoreException) {
+                error(failure.code, failure.message, true)
+            } else {
+                error("core_start_failed", failure.message ?: "core failure", true)
+            }
+        }
     }
 
     private fun ok(result: JSONObject): JSONObject = JSONObject().put("ok", true).put("result", result)

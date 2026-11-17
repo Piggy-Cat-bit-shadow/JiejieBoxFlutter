@@ -34,6 +34,19 @@ var (
 		Message:   "expectedRevision does not match the stored revision",
 		Retryable: true,
 	}
+	errStaleRevision = &bridgeError{
+		Code:      "stale_revision",
+		Message:   "the request revision is older than the last accepted revision",
+		Retryable: false,
+	}
+	errProfileNotFound = func(id string) *bridgeError {
+		return &bridgeError{
+			Code:      "profile_not_found",
+			Message:   "profile not found: " + id,
+			Retryable: false,
+			Details:   map[string]any{"id": id},
+		}
+	}
 	errStorageWriteFailed = func(what string) *bridgeError {
 		return &bridgeError{Code: "storage_write_failed", Message: what, Retryable: true}
 	}

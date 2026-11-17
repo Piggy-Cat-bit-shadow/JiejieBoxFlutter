@@ -29,6 +29,8 @@ enum HostErrorCode {
   storageWriteFailed('storage_write_failed', true, AppErrorClass.io),
   storageCorrupt('storage_corrupt', false, AppErrorClass.io),
   revisionMismatch('revision_mismatch', true, AppErrorClass.invalidConfig),
+  profileNotFound('profile_not_found', false, AppErrorClass.invalidConfig),
+  staleRevision('stale_revision', false, AppErrorClass.invalidConfig),
   transportDisconnected('transport_disconnected', true, AppErrorClass.io),
   timeout('timeout', true, AppErrorClass.timeout),
   cancelled('cancelled', true, AppErrorClass.timeout),

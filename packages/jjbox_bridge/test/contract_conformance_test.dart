@@ -16,7 +16,7 @@ void main() {
   });
 
   test('the error vocabulary is the contract revision', () {
-    expect(HostErrorCode.values.length, 20);
+    expect(HostErrorCode.values.length, 22);
     final RegExp snake = RegExp(r'^[a-z][a-z0-9_]*$');
     for (final HostErrorCode code in HostErrorCode.values) {
       expect(snake.hasMatch(code.wireName), isTrue, reason: code.wireName);

@@ -14,6 +14,8 @@ type unlinkedCore struct{}
 
 func defaultCore() coreAPI { return unlinkedCore{} }
 
+func (unlinkedCore) Configure(string) {}
+
 func (unlinkedCore) Capabilities() map[string]any {
 	return map[string]any{
 		"apiVersion":   0,
@@ -41,3 +43,11 @@ func (unlinkedCore) Preview(string) (map[string]any, *bridgeError) {
 func (unlinkedCore) Refresh([]string, int64) (map[string]any, *bridgeError) {
 	return nil, errUnsupportedPlatform("provider.refresh needs a running core service")
 }
+
+func (unlinkedCore) StartService(string) *bridgeError {
+	return errUnsupportedPlatform("service.start needs a libbox-linked host build")
+}
+
+func (unlinkedCore) StopService() *bridgeError { return nil }
+
+func (unlinkedCore) Running() bool { return false }

@@ -3,7 +3,7 @@ import 'package:jjbox_bridge/jjbox_bridge.dart';
 
 void main() {
   test('the vocabulary has the 19 contract codes with unique wire names', () {
-    expect(HostErrorCode.values.length, 20);
+    expect(HostErrorCode.values.length, 22);
     final Set<String> names = HostErrorCode.values
         .map((HostErrorCode code) => code.wireName)
         .toSet();

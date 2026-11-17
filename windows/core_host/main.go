@@ -31,7 +31,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "profile store: %v\n", err)
 		os.Exit(2)
 	}
-	server := newHostServer(store, defaultCore())
+	core := defaultCore()
+	core.Configure(dir)
+	server := newHostServer(store, core)
 	server.hooks = *testHooks
 
 	if *selftest {

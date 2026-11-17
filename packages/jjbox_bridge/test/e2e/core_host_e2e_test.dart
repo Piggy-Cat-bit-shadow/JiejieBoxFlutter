@@ -208,10 +208,14 @@ void main() {
     expect(await bridge.listProfiles(), isEmpty);
     record('request', 'profile.list', ok: true, detail: 'empty');
 
+    const String configV1 =
+        '{"log":{"level":"info"},"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"}}';
+    const String configV2 =
+        '{"log":{"level":"warn"},"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"}}';
     final ProfileWriteResult v1 = await bridge.writeProfile(
       label: 'p3',
       kind: 'local',
-      content: Uint8List.fromList(utf8.encode('{"v":1}')),
+      content: Uint8List.fromList(utf8.encode(configV1)),
     );
     record('request', 'profile.write(v1)', ok: true, detail: v1.revision);
     expect(v1.revision, isNotEmpty);
@@ -220,7 +224,7 @@ void main() {
       id: v1.id,
       label: 'p3',
       kind: 'local',
-      content: Uint8List.fromList(utf8.encode('{"v":2}')),
+      content: Uint8List.fromList(utf8.encode(configV2)),
       expectedRevision: v1.revision,
     );
     record('request', 'profile.write(v2)', ok: true, detail: v2.revision);
@@ -236,54 +240,64 @@ void main() {
       detail: restored.revision,
     );
     expect(restored.revision, v1.revision);
-    expect(utf8.decode((await bridge.readProfile(v1.id)).content), '{"v":1}');
+    expect(utf8.decode((await bridge.readProfile(v1.id)).content), configV1);
 
-    final StartAck ack = await bridge.start(
-      revision: 1,
-      mode: 'proxy',
-      profileId: v1.id,
-      profileRevision: v1.revision,
-    );
-    record('request', 'service.start', ok: ack.accepted);
-    expect(ack.accepted, isTrue);
-    expect((await bridge.status()).state, isNot('running'));
+    if (linked) {
+      final StartAck ack = await bridge.start(
+        revision: 1,
+        mode: 'proxy',
+        profileId: v1.id,
+        profileRevision: v1.revision,
+      );
+      record('request', 'service.start', ok: ack.accepted);
+      expect(ack.accepted, isTrue);
+      expect((await bridge.status()).state, 'running');
 
-    await bridge.invoke('test.runtime', <String, Object?>{'running': true});
-    record('request', 'test.runtime(running)', ok: true);
-    final RuntimeStatus running = await bridge.status();
-    expect(running.state, 'running');
+      await expectLater(
+        bridge.start(
+          revision: 1,
+          mode: 'proxy',
+          profileId: v1.id,
+          profileRevision: v1.revision,
+        ),
+        throwsA(
+          isA<HostError>().having(
+            (HostError error) => error.code,
+            'code',
+            HostErrorCode.staleRevision,
+          ),
+        ),
+      );
+      record('request', 'service.start(stale)', ok: false);
+      await bridge.stop(revision: 2);
+      record('request', 'service.stop', ok: true);
+      expect((await bridge.status()).state, 'idle');
 
-    await bridge.stop(revision: 2);
-    await bridge.invoke('test.runtime', <String, Object?>{'running': false});
-    record('request', 'service.stop', ok: true);
-    expect((await bridge.status()).state, 'idle');
-
-    await bridge.start(
-      revision: 3,
-      mode: 'vpn',
-      profileId: v1.id,
-      profileRevision: v1.revision,
-    );
-    expect((await bridge.status()).state, 'awaitingPermission');
-    await bridge.invoke('test.permission', <String, Object?>{'granted': true});
-    record('request', 'test.permission(granted)', ok: true);
-    expect((await bridge.status()).state, 'starting');
-    await bridge.invoke('test.runtime', <String, Object?>{'running': true});
-    expect((await bridge.status()).state, 'running');
-    await bridge.stop(revision: 4);
-    await bridge.invoke('test.runtime', <String, Object?>{'running': false});
-
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(
-      events.where((HostCallback e) => e.type == 'service.state'),
-      isNotEmpty,
-    );
-    expect(
-      events.where((HostCallback e) => e.type == 'permission.changed'),
-      isNotEmpty,
-    );
-    for (final HostCallback event in events) {
-      record('event', event.type, detail: 'seq=${event.seq}');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(
+        events.where((HostCallback e) => e.type == 'service.state'),
+        isNotEmpty,
+      );
+      for (final HostCallback event in events) {
+        record('event', event.type, detail: 'seq=${event.seq}');
+      }
+    } else {
+      await expectLater(
+        bridge.start(
+          revision: 1,
+          mode: 'proxy',
+          profileId: v1.id,
+          profileRevision: v1.revision,
+        ),
+        throwsA(
+          isA<HostError>().having(
+            (HostError error) => error.code,
+            'code',
+            HostErrorCode.unsupportedPlatform,
+          ),
+        ),
+      );
+      record('request', 'service.start(unlinked)', ok: false);
     }
 
     await bridge.shutdown();
@@ -389,7 +403,7 @@ void main() {
     expect(profiles, hasLength(1));
     expect(
       utf8.decode((await bridge.readProfile(profiles.single.id)).content),
-      '{"v":1}',
+      '{"log":{"level":"info"},"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"}}',
     );
     await bridge.shutdown();
   }, skip: !ready);

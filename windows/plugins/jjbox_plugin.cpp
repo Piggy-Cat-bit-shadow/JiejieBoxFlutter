@@ -1,6 +1,7 @@
 // The Flutter Windows end of `jjbox/host`. It is a transport, not a policy layer:
-// the JSON envelope goes to the Go host process byte for byte, and callbacks come
-// back on `jjbox/host/callback`.
+// the JSON envelope goes to the Go host process byte for byte. The host is
+// request/response only (host.capabilities.events is false), so this plugin does
+// not pretend to deliver asynchronous callbacks.
 //
 // The pipe name is read from JJBOX_HOST_PIPE so a debug build can point at a
 // per-user pipe without rebuilding; production uses \\.\pipe\jjbox-host, created
@@ -24,14 +25,21 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
 
 using flutter::EncodableValue;
+
+constexpr DWORD kPipeIoTimeoutMs = 10000;
+constexpr UINT kCompletionMessage = WM_APP + 0x4A;
 
 std::string Utf8FromWide(const std::wstring& value) {
   if (value.empty()) return {};
@@ -51,164 +59,6 @@ std::wstring PipeName() {
   if (read > 0 && read < 512) return std::wstring(buffer, read);
   return L"\\\\.\\pipe\\jjbox-host";
 }
-
-bool WriteAll(HANDLE pipe, const char* data, DWORD length) {
-  DWORD written = 0;
-  while (written < length) {
-    if (!WriteFile(pipe, data + written, length - written, &written, nullptr)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool ReadAll(HANDLE pipe, char* data, DWORD length) {
-  DWORD read = 0;
-  while (read < length) {
-    DWORD step = 0;
-    if (!ReadFile(pipe, data + read, length - read, &step, nullptr)) {
-      return false;
-    }
-    if (step == 0) return false;
-    read += step;
-  }
-  return true;
-}
-
-class JjboxPlugin;
-
-// One connection, one reader thread. The bridge is request/response per socket,
-// so the mutex only serialises a write with its matching read.
-class HostLink {
- public:
-  explicit HostLink(JjboxPlugin* owner) : owner_(owner) {}
-  ~HostLink() { Close(); }
-
-  bool Send(const std::string& payload, std::string* response) {
-    std::lock_guard<std::mutex> guard(write_mutex_);
-    if (!Ensure()) return false;
-    jjbox::FrameHeader header{static_cast<uint32_t>(payload.size()), 0};
-    if (!WriteAll(pipe_, reinterpret_cast<const char*>(&header), sizeof(header)) ||
-        !WriteAll(pipe_, payload.data(), static_cast<DWORD>(payload.size()))) {
-      Close();
-      return false;
-    }
-    jjbox::FrameHeader reply{0, 0};
-    if (!ReadAll(pipe_, reinterpret_cast<char*>(&reply), sizeof(reply))) {
-      Close();
-      return false;
-    }
-    if (reply.length > jjbox::kMaxPayloadBytes) {
-      Close();
-      return false;
-    }
-    response->resize(reply.length);
-    if (reply.length > 0 && !ReadAll(pipe_, response->data(), reply.length)) {
-      Close();
-      return false;
-    }
-    return true;
-  }
-
-  void Close() {
-    std::lock_guard<std::mutex> guard(write_mutex_);
-    if (pipe_ != INVALID_HANDLE_VALUE) {
-      CloseHandle(pipe_);
-      pipe_ = INVALID_HANDLE_VALUE;
-    }
-  }
-
- private:
-  bool Ensure() {
-    if (pipe_ != INVALID_HANDLE_VALUE) return true;
-    pipe_ = CreateFileW(PipeName().c_str(), GENERIC_READ | GENERIC_WRITE, 0,
-                        nullptr, OPEN_EXISTING, 0, nullptr);
-    return pipe_ != INVALID_HANDLE_VALUE;
-  }
-
-  JjboxPlugin* owner_;
-  HANDLE pipe_ = INVALID_HANDLE_VALUE;
-  std::mutex write_mutex_;
-};
-
-class JjboxPlugin : public flutter::Plugin {
- public:
-  explicit JjboxPlugin(flutter::PluginRegistrarWindows* registrar)
-      : registrar_(registrar), link_(new HostLink(this)) {
-    commands_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
-        registrar->messenger(), jjbox::kCommandsChannel,
-        &flutter::StandardMethodCodec::GetInstance());
-    commands_->SetMethodCallHandler(
-        [this](const auto& call, auto result) { Handle(call, std::move(result)); });
-    callbacks_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
-        registrar->messenger(), jjbox::kCallbacksChannel,
-        &flutter::StandardMethodCodec::GetInstance());
-  }
-
-  ~JjboxPlugin() override {
-    if (link_) link_->Close();
-  }
-
-  // Called from the reader thread once the read loop exists. The frame must reach
-  // the platform thread before it touches the messenger; the exact runner accessor
-  // has to be checked against the 3.47.6 Windows embedder headers on first compile
-  // (this file is authored, not yet compiled on this host).
-  void Deliver(const std::string& frame) {
-    // TODO(P1): post to the platform thread via PluginRegistrarWindows, then
-    // callbacks_->InvokeMethod("event", ...).
-    pending_.push_back(frame);
-  }
-
- private:
-  void Handle(const flutter::MethodCall<EncodableValue>& call,
-              std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
-    if (call.method_name() != jjbox::kInvokeMethod) {
-      result->NotImplemented();
-      return;
-    }
-    const auto* payload = std::get_if<std::string>(call.arguments());
-    if (payload == nullptr) {
-      result->Error("bad_args", "jjbox.invoke expects a JSON string");
-      return;
-    }
-    const std::string method = SniffString(*payload, "method");
-    const std::string id = SniffString(*payload, "id");
-    if (method == "clipboard.readCandidate") {
-      const std::string text = ReadClipboardText();
-      result->Success(EncodableValue(OkEnvelope(
-          id, "{\"text\":\"" + JsonEscape(text) + "\",\"likely\":\"" +
-                  ClassifyClipboard(text) + "\"}")));
-      return;
-    }
-    if (method == "file.pickConfig") {
-      PickedConfig picked;
-      if (!PickConfigFile(&picked)) {
-        result->Success(EncodableValue(OkEnvelope(id, "null")));
-        return;
-      }
-      result->Success(EncodableValue(OkEnvelope(
-          id, "{\"name\":\"" + JsonEscape(Utf8FromWide(picked.name)) +
-                  "\",\"content\":\"" + Base64Encode(picked.bytes) +
-                  "\",\"sha256\":\"" + Sha256Hex(picked.bytes) + "\"}")));
-      return;
-    }
-    std::string response;
-    if (!link_->Send(*payload, &response)) {
-      // The host is not there: the Dart side turns this into core_unavailable or
-      // transport_disconnected and asks for service.status after reconnecting.
-      result->Error("transport_unavailable", "jjbox host pipe is not reachable");
-      return;
-    }
-    result->Success(EncodableValue(response));
-  }
-
-  flutter::PluginRegistrarWindows* registrar_;
-  std::unique_ptr<HostLink> link_;
-  std::unique_ptr<flutter::MethodChannel<EncodableValue>> commands_;
-  std::unique_ptr<flutter::MethodChannel<EncodableValue>> callbacks_;
-  std::vector<std::string> pending_;
-};
-
 
 std::string SniffString(const std::string& payload, const std::string& key) {
   const std::string needle = "\"" + key + "\":\"";
@@ -245,13 +95,6 @@ std::string JsonEscape(const std::string& value) {
 
 std::string OkEnvelope(const std::string& id, const std::string& resultJson) {
   return "{\"id\":\"" + JsonEscape(id) + "\",\"ok\":true,\"result\":" + resultJson + "}";
-}
-
-std::string ErrorEnvelope(const std::string& id, const std::string& code,
-                          const std::string& message, bool retryable) {
-  return "{\"id\":\"" + JsonEscape(id) + "\",\"ok\":false,\"error\":{\"code\":\"" +
-         JsonEscape(code) + "\",\"message\":\"" + JsonEscape(message) +
-         "\",\"retryable\":" + (retryable ? "true" : "false") + "}}";
 }
 
 std::string Base64Encode(const std::vector<unsigned char>& data) {
@@ -379,6 +222,276 @@ bool PickConfigFile(PickedConfig* picked) {
   picked->name = slash == std::wstring::npos ? full : full.substr(slash + 1);
   return true;
 }
+
+// Waits for an overlapped pipe operation. This is the timeout that keeps a
+// wedged host from blocking a worker forever; the worker itself is off the
+// platform thread.
+bool WaitOverlapped(HANDLE pipe, OVERLAPPED* overlapped, DWORD timeout,
+                    DWORD* transferred) {
+  if (WaitForSingleObject(overlapped->hEvent, timeout) != WAIT_OBJECT_0) {
+    CancelIoEx(pipe, overlapped);
+    WaitForSingleObject(overlapped->hEvent, 1000);
+    return false;
+  }
+  return GetOverlappedResult(pipe, overlapped, transferred, FALSE) != FALSE;
+}
+
+bool WriteAll(HANDLE pipe, const char* data, DWORD length) {
+  DWORD written = 0;
+  while (written < length) {
+    OVERLAPPED overlapped = {};
+    overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (overlapped.hEvent == nullptr) return false;
+    DWORD step = 0;
+    const BOOL started = WriteFile(pipe, data + written, length - written,
+                                   &step, &overlapped);
+    if (started) {
+      if (!GetOverlappedResult(pipe, &overlapped, &step, FALSE)) {
+        CloseHandle(overlapped.hEvent);
+        return false;
+      }
+    } else if (GetLastError() != ERROR_IO_PENDING ||
+               !WaitOverlapped(pipe, &overlapped, kPipeIoTimeoutMs, &step)) {
+      CloseHandle(overlapped.hEvent);
+      return false;
+    }
+    CloseHandle(overlapped.hEvent);
+    if (step == 0) return false;
+    written += step;
+  }
+  return true;
+}
+
+bool ReadAll(HANDLE pipe, char* data, DWORD length) {
+  DWORD read = 0;
+  while (read < length) {
+    OVERLAPPED overlapped = {};
+    overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (overlapped.hEvent == nullptr) return false;
+    DWORD step = 0;
+    const BOOL started = ReadFile(pipe, data + read, length - read,
+                                  &step, &overlapped);
+    if (started) {
+      if (!GetOverlappedResult(pipe, &overlapped, &step, FALSE)) {
+        CloseHandle(overlapped.hEvent);
+        return false;
+      }
+    } else if (GetLastError() != ERROR_IO_PENDING ||
+               !WaitOverlapped(pipe, &overlapped, kPipeIoTimeoutMs, &step)) {
+      CloseHandle(overlapped.hEvent);
+      return false;
+    }
+    CloseHandle(overlapped.hEvent);
+    if (step == 0) return false;
+    read += step;
+  }
+  return true;
+}
+
+class JjboxPlugin;
+
+// One connection. Send is called on a worker thread, never on the platform
+// thread; the mutex serialises a write with its matching read.
+class HostLink {
+ public:
+  explicit HostLink(JjboxPlugin* owner) : owner_(owner) {}
+  ~HostLink() { Close(); }
+
+  bool Send(const std::string& payload, std::string* response) {
+    std::lock_guard<std::mutex> guard(write_mutex_);
+    if (!Ensure()) return false;
+    jjbox::FrameHeader header{static_cast<uint32_t>(payload.size()), 0};
+    if (!WriteAll(pipe_, reinterpret_cast<const char*>(&header), sizeof(header)) ||
+        !WriteAll(pipe_, payload.data(), static_cast<DWORD>(payload.size()))) {
+      CloseLocked();
+      return false;
+    }
+    jjbox::FrameHeader reply{0, 0};
+    if (!ReadAll(pipe_, reinterpret_cast<char*>(&reply), sizeof(reply))) {
+      CloseLocked();
+      return false;
+    }
+    if (reply.length > jjbox::kMaxPayloadBytes) {
+      CloseLocked();
+      return false;
+    }
+    response->resize(reply.length);
+    if (reply.length > 0 && !ReadAll(pipe_, response->data(), reply.length)) {
+      CloseLocked();
+      return false;
+    }
+    return true;
+  }
+
+  void Close() {
+    std::lock_guard<std::mutex> guard(write_mutex_);
+    CloseLocked();
+  }
+
+ private:
+  bool Ensure() {
+    if (pipe_ != INVALID_HANDLE_VALUE) return true;
+    pipe_ = CreateFileW(PipeName().c_str(), GENERIC_READ | GENERIC_WRITE, 0,
+                        nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+    return pipe_ != INVALID_HANDLE_VALUE;
+  }
+
+  // The caller already holds write_mutex_. A second lock here was the
+  // disconnect self-deadlock: Send held the mutex and called Close(), which
+  // tried to take it again.
+  void CloseLocked() {
+    if (pipe_ != INVALID_HANDLE_VALUE) {
+      CancelIoEx(pipe_, nullptr);
+      CloseHandle(pipe_);
+      pipe_ = INVALID_HANDLE_VALUE;
+    }
+  }
+
+  JjboxPlugin* owner_;
+  HANDLE pipe_ = INVALID_HANDLE_VALUE;
+  std::mutex write_mutex_;
+};
+
+class JjboxPlugin : public flutter::Plugin {
+ public:
+  explicit JjboxPlugin(flutter::PluginRegistrarWindows* registrar)
+      : registrar_(registrar), link_(new HostLink(this)) {
+    if (auto* view = registrar_->GetView()) {
+      window_handle_ = view->GetNativeWindow();
+    }
+    if (window_handle_ != nullptr) {
+      window_proc_delegate_id_ = registrar_->RegisterTopLevelWindowProcDelegate(
+          [this](HWND, UINT message, WPARAM, LPARAM) -> std::optional<LRESULT> {
+            if (message == kCompletionMessage) {
+              DrainCompletions();
+              return 0;
+            }
+            return std::nullopt;
+          });
+    }
+    commands_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
+        registrar->messenger(), jjbox::kCommandsChannel,
+        &flutter::StandardMethodCodec::GetInstance());
+    commands_->SetMethodCallHandler(
+        [this](const auto& call, auto result) { Handle(call, std::move(result)); });
+    callbacks_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
+        registrar->messenger(), jjbox::kCallbacksChannel,
+        &flutter::StandardMethodCodec::GetInstance());
+  }
+
+  ~JjboxPlugin() override {
+    {
+      std::lock_guard<std::mutex> guard(completion_mutex_);
+      shutting_down_ = true;
+    }
+    if (link_) link_->Close();
+    {
+      std::unique_lock<std::mutex> lock(completion_mutex_);
+      completion_cv_.wait(lock, [this] { return in_flight_ == 0; });
+    }
+    if (window_proc_delegate_id_ != 0) {
+      registrar_->UnregisterTopLevelWindowProcDelegate(window_proc_delegate_id_);
+    }
+  }
+
+ private:
+  struct Completion {
+    std::unique_ptr<flutter::MethodResult<EncodableValue>> result;
+    bool ok = false;
+    std::string response;
+  };
+
+  void Handle(const flutter::MethodCall<EncodableValue>& call,
+              std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+    if (call.method_name() != jjbox::kInvokeMethod) {
+      result->NotImplemented();
+      return;
+    }
+    const auto* payload = std::get_if<std::string>(call.arguments());
+    if (payload == nullptr) {
+      result->Error("bad_args", "jjbox.invoke expects a JSON string");
+      return;
+    }
+    const std::string method = SniffString(*payload, "method");
+    const std::string id = SniffString(*payload, "id");
+    if (method == "clipboard.readCandidate") {
+      const std::string text = ReadClipboardText();
+      result->Success(EncodableValue(OkEnvelope(
+          id, "{\"text\":\"" + JsonEscape(text) + "\",\"likely\":\"" +
+                  ClassifyClipboard(text) + "\"}")));
+      return;
+    }
+    if (method == "file.pickConfig") {
+      PickedConfig picked;
+      if (!PickConfigFile(&picked)) {
+        result->Success(EncodableValue(OkEnvelope(id, "null")));
+        return;
+      }
+      result->Success(EncodableValue(OkEnvelope(
+          id, "{\"name\":\"" + JsonEscape(Utf8FromWide(picked.name)) +
+                  "\",\"content\":\"" + Base64Encode(picked.bytes) +
+                  "\",\"sha256\":\"" + Sha256Hex(picked.bytes) + "\"}")));
+      return;
+    }
+
+    // Host calls run on a worker. The platform thread returns immediately; the
+    // result is delivered from DrainCompletions after PostMessage. That makes a
+    // hung host a timeout, not a frozen UI thread.
+    {
+      std::lock_guard<std::mutex> guard(completion_mutex_);
+      in_flight_++;
+    }
+    std::thread([this, payload = std::string(*payload),
+                 result = std::move(result)]() mutable {
+      std::string response;
+      const bool ok = link_->Send(payload, &response);
+      {
+        std::lock_guard<std::mutex> guard(completion_mutex_);
+        auto completion = std::make_unique<Completion>();
+        completion->result = std::move(result);
+        completion->ok = ok;
+        completion->response = std::move(response);
+        completions_.push_back(std::move(completion));
+      }
+      if (window_handle_ != nullptr) {
+        PostMessageW(window_handle_, kCompletionMessage, 0, 0);
+      }
+      {
+        std::lock_guard<std::mutex> guard(completion_mutex_);
+        in_flight_--;
+      }
+      completion_cv_.notify_all();
+    }).detach();
+  }
+
+  void DrainCompletions() {
+    std::vector<std::unique_ptr<Completion>> ready;
+    {
+      std::lock_guard<std::mutex> guard(completion_mutex_);
+      ready.swap(completions_);
+    }
+    for (auto& completion : ready) {
+      if (completion->ok) {
+        completion->result->Success(EncodableValue(completion->response));
+      } else {
+        completion->result->Error("transport_unavailable",
+                                  "jjbox host pipe is not reachable or timed out");
+      }
+    }
+  }
+
+  flutter::PluginRegistrarWindows* registrar_;
+  std::unique_ptr<HostLink> link_;
+  std::unique_ptr<flutter::MethodChannel<EncodableValue>> commands_;
+  std::unique_ptr<flutter::MethodChannel<EncodableValue>> callbacks_;
+  HWND window_handle_ = nullptr;
+  int window_proc_delegate_id_ = 0;
+  std::mutex completion_mutex_;
+  std::condition_variable completion_cv_;
+  std::vector<std::unique_ptr<Completion>> completions_;
+  int in_flight_ = 0;
+  bool shutting_down_ = false;
+};
 
 }  // namespace
 
