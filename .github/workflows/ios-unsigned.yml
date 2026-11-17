@@ -6,6 +6,11 @@ name: ios-unsigned
 # stock, non-jailbroken device.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/p7-final
+    paths:
+      - '.github/workflows/ios-unsigned.yml'
 
 permissions:
   contents: read
