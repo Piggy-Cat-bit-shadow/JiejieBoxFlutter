@@ -29,3 +29,7 @@ Thumbs.db
 
 # Local overrides
 *.local
+
+# C host build outputs
+windows/core_host/*.exe
+windows/core_host/*.exe~

@@ -4,8 +4,9 @@ import 'package:jjbox_bridge/jjbox_bridge.dart';
 void main() {
   test('the vocabulary has the 19 contract codes with unique wire names', () {
     expect(HostErrorCode.values.length, 20);
-    final Set<String> names =
-        HostErrorCode.values.map((HostErrorCode code) => code.wireName).toSet();
+    final Set<String> names = HostErrorCode.values
+        .map((HostErrorCode code) => code.wireName)
+        .toSet();
     expect(names.length, HostErrorCode.values.length);
     expect(names, contains('core_rejected_config'));
     expect(names, contains('config_findings'));
@@ -41,9 +42,15 @@ void main() {
   });
 
   test('A-side classes come from the contract mapping', () {
-    expect(HostErrorCode.coreRejectedConfig.appClass, AppErrorClass.invalidConfig);
+    expect(
+      HostErrorCode.coreRejectedConfig.appClass,
+      AppErrorClass.invalidConfig,
+    );
     expect(HostErrorCode.configFindings.appClass, AppErrorClass.invalidConfig);
-    expect(HostErrorCode.revisionMismatch.appClass, AppErrorClass.invalidConfig);
+    expect(
+      HostErrorCode.revisionMismatch.appClass,
+      AppErrorClass.invalidConfig,
+    );
     expect(HostErrorCode.unsupported.appClass, AppErrorClass.unsupported);
     expect(
       HostErrorCode.providerRefreshUnsupported.appClass,

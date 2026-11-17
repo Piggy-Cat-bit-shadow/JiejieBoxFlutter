@@ -1,0 +1,57 @@
+# XcodeGen spec for the bridge targets.
+#
+# The checked-in Runner.xcodeproj is the plain Flutter template plus the app-local
+# JjboxHostPlugin source; it cannot host a Network Extension target because the
+# extension needs its own build settings and entitlements. On a macOS machine run
+#   brew install xcodegen && xcodegen generate
+# to regenerate Runner.xcodeproj with both targets, then
+#   flutter build ios --release --no-codesign
+name: Runner
+options:
+  bundleIdPrefix: com.jiejiebox
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    ENABLE_BITCODE: NO
+    DEVELOPMENT_TEAM: ""
+targets:
+  Runner:
+    type: application
+    platform: iOS
+    sources:
+      - path: Runner
+    configFiles:
+      Debug: Flutter/Debug.xcconfig
+      Release: Flutter/Release.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jiejiebox.app
+        INFOPLIST_FILE: Runner/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Runner/Runner.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+    preBuildScripts:
+      - name: Flutter build
+        script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" build
+        basedOnDependencyAnalysis: false
+    postCompileScripts:
+      - name: Flutter embed and thin
+        script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" embed_and_thin
+        basedOnDependencyAnalysis: false
+    dependencies:
+      - target: NetworkExtension
+        embed: true
+  NetworkExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NetworkExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jiejiebox.app.tunnel
+        INFOPLIST_FILE: NetworkExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: NetworkExtension/NetworkExtension.entitlements
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"

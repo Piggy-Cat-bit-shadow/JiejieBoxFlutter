@@ -6,6 +6,7 @@ library;
 
 class HostCapabilities {
   const HostCapabilities({
+    this.core = false,
     this.tun = false,
     this.systemProxy = false,
     this.perAppProxy = false,
@@ -26,6 +27,7 @@ class HostCapabilities {
     final List<Object?> modes =
         (json['serviceModes'] as List<Object?>?) ?? const <Object?>['vpn'];
     return HostCapabilities(
+      core: flag('core'),
       tun: flag('tun'),
       systemProxy: flag('systemProxy'),
       perAppProxy: flag('perAppProxy'),
@@ -42,6 +44,9 @@ class HostCapabilities {
     );
   }
 
+  /// Whether this host build links a kernel at all. False means config.* answers
+  /// `unsupported_platform`, not `core_unavailable`.
+  final bool core;
   final bool tun;
   final bool systemProxy;
   final bool perAppProxy;
@@ -61,20 +66,21 @@ class HostCapabilities {
   bool get supportsDesktopShell => tray || autostart;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'tun': tun,
-        'systemProxy': systemProxy,
-        'perAppProxy': perAppProxy,
-        'autostart': autostart,
-        'tray': tray,
-        'qrCamera': qrCamera,
-        'qrImageDecode': qrImageDecode,
-        'fileImport': fileImport,
-        'clipboardWatch': clipboardWatch,
-        'notifications': notifications,
-        'deepLink': deepLink,
-        'memoryPressure': memoryPressure,
-        'serviceModes': serviceModes,
-      };
+    'core': core,
+    'tun': tun,
+    'systemProxy': systemProxy,
+    'perAppProxy': perAppProxy,
+    'autostart': autostart,
+    'tray': tray,
+    'qrCamera': qrCamera,
+    'qrImageDecode': qrImageDecode,
+    'fileImport': fileImport,
+    'clipboardWatch': clipboardWatch,
+    'notifications': notifications,
+    'deepLink': deepLink,
+    'memoryPressure': memoryPressure,
+    'serviceModes': serviceModes,
+  };
 }
 
 /// `core.capabilities`: the probe B requires before any optional call.
@@ -94,7 +100,8 @@ class CoreCapabilities {
   });
 
   factory CoreCapabilities.fromJson(Map<String, Object?> json) {
-    final List<Object?> rawTypes = (json['capabilities'] as List<Object?>?) ??
+    final List<Object?> rawTypes =
+        (json['capabilities'] as List<Object?>?) ??
         (json['types'] as List<Object?>?) ??
         const <Object?>[];
     final List<String> types = <String>[];
@@ -132,11 +139,7 @@ class CoreCapabilities {
     if (!types.contains(type)) {
       return false;
     }
-    const Set<String> quicFamily = <String>{
-      'hysteria',
-      'hysteria2',
-      'tuic',
-    };
+    const Set<String> quicFamily = <String>{'hysteria', 'hysteria2', 'tuic'};
     if (quicFamily.contains(type)) {
       return buildQuic ?? false;
     }
@@ -144,15 +147,18 @@ class CoreCapabilities {
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'apiVersion': apiVersion,
-        'buildId': buildId,
-        'buildQuic': buildQuic,
-        'platform': platform,
-        'version': version,
-        'goVersion': goVersion,
-        'capabilities': <Object?>[
-          for (final String type in types)
-            <String, Object?>{'kind': 'outbound', 'types': <String>[type]},
-        ],
-      };
+    'apiVersion': apiVersion,
+    'buildId': buildId,
+    'buildQuic': buildQuic,
+    'platform': platform,
+    'version': version,
+    'goVersion': goVersion,
+    'capabilities': <Object?>[
+      for (final String type in types)
+        <String, Object?>{
+          'kind': 'outbound',
+          'types': <String>[type],
+        },
+    ],
+  };
 }

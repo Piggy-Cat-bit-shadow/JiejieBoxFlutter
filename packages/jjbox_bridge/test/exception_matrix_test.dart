@@ -30,30 +30,41 @@ void main() {
   Future<ProfileWriteResult> write(String body, {String label = 'p'}) =>
       repository.write(label: label, kind: 'local', content: _bytes(body));
 
-  test('E1 file permission denied is a typed error, nothing is written', () async {
-    host.failNext(BridgeMethod.filePickConfig, HostErrorCode.permissionDenied);
-    await expectLater(
-      bridge.pickConfig(),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
+  test(
+    'E1 file permission denied is a typed error, nothing is written',
+    () async {
+      host.failNext(
+        BridgeMethod.filePickConfig,
         HostErrorCode.permissionDenied,
-      )),
-    );
-    expect(await repository.list(), isEmpty);
-  });
+      );
+      await expectLater(
+        bridge.pickConfig(),
+        throwsA(
+          isA<HostError>().having(
+            (HostError error) => error.code,
+            'code',
+            HostErrorCode.permissionDenied,
+          ),
+        ),
+      );
+      expect(await repository.list(), isEmpty);
+    },
+  );
 
   test('E2 a killed UI process leaves host-owned profiles readable', () async {
     final ProfileWriteResult before = await write('{"v":1}');
     await bridge.dispose();
     final HostBridge restarted = HostBridge(transport: host);
     addTearDown(restarted.dispose);
-    final ProfileRepository restartedRepository =
-        ProfileRepository(bridge: restarted);
+    final ProfileRepository restartedRepository = ProfileRepository(
+      bridge: restarted,
+    );
     final List<ProfileMeta> profiles = await restartedRepository.list();
     expect(profiles.single.id, before.id);
-    expect(utf8.decode((await restartedRepository.read(before.id)).content),
-        '{"v":1}');
+    expect(
+      utf8.decode((await restartedRepository.read(before.id)).content),
+      '{"v":1}',
+    );
   });
 
   test('E3 repeated copy/import does not duplicate the profile', () async {
@@ -61,10 +72,13 @@ void main() {
       bridge: bridge,
       repository: repository,
     );
-    final ImportPlan plan = await pipeline.prepare(const ImportRequest(
-      source: ImportSource.clipboard,
-      text: 'vless://11111111-2222-3333-4444-555555555555@example.com:443#demo',
-    ));
+    final ImportPlan plan = await pipeline.prepare(
+      const ImportRequest(
+        source: ImportSource.clipboard,
+        text:
+            'vless://11111111-2222-3333-4444-555555555555@example.com:443#demo',
+      ),
+    );
     final ImportResult first = await pipeline.commit(plan, confirmed: true);
     final ImportResult second = await pipeline.commit(plan, confirmed: true);
     expect(second.profile.id, first.profile.id);
@@ -104,10 +118,12 @@ void main() {
     final List<Future<ImportResult>> pending = <Future<ImportResult>>[
       for (int i = 0; i < 3; i++)
         pipeline
-            .prepare(ImportRequest(
-              source: ImportSource.file,
-              text: 'vless://uuid$i@example.com:443#n$i',
-            ))
+            .prepare(
+              ImportRequest(
+                source: ImportSource.file,
+                text: 'vless://uuid$i@example.com:443#n$i',
+              ),
+            )
             .then((ImportPlan plan) => pipeline.commit(plan, confirmed: true)),
     ];
     final List<ImportResult> results = await Future.wait(pending);
@@ -131,28 +147,35 @@ void main() {
     expect(await transaction.recover(), isA<SwitchApplied>());
   });
 
-  test('E6 provider refresh never holds the write lock and flags raced edits',
-      () async {
-    final ProfileWriteResult profile = await write('{"v":1}');
-    host.delayNext(BridgeMethod.providerRefresh, const Duration(milliseconds: 60));
-    final ProviderRefreshCoordinator coordinator = ProviderRefreshCoordinator(
-      bridge: bridge,
-      repository: repository,
-    );
-    final Future<RefreshOutcome> refresh = coordinator.refresh(<String>['sub']);
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    expect(repository.idle, isTrue);
-    await repository.write(
-      id: profile.id,
-      label: 'edited during refresh',
-      kind: 'local',
-      content: _bytes('{"v":2}'),
-      expectedRevision: profile.revision,
-    );
-    final RefreshOutcome outcome = await refresh;
-    expect(outcome.supported, isTrue);
-    expect(outcome.racedEdits, isTrue);
-  });
+  test(
+    'E6 provider refresh never holds the write lock and flags raced edits',
+    () async {
+      final ProfileWriteResult profile = await write('{"v":1}');
+      host.delayNext(
+        BridgeMethod.providerRefresh,
+        const Duration(milliseconds: 60),
+      );
+      final ProviderRefreshCoordinator coordinator = ProviderRefreshCoordinator(
+        bridge: bridge,
+        repository: repository,
+      );
+      final Future<RefreshOutcome> refresh = coordinator.refresh(<String>[
+        'sub',
+      ]);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(repository.idle, isTrue);
+      await repository.write(
+        id: profile.id,
+        label: 'edited during refresh',
+        kind: 'local',
+        content: _bytes('{"v":2}'),
+        expectedRevision: profile.revision,
+      );
+      final RefreshOutcome outcome = await refresh;
+      expect(outcome.supported, isTrue);
+      expect(outcome.racedEdits, isTrue);
+    },
+  );
 
   test('E7 a core that cannot refresh reports supported:false', () async {
     host.providerRefreshSupported = false;
@@ -176,51 +199,64 @@ void main() {
         content: _bytes('{"v":2}'),
         expectedRevision: first.revision,
       ),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.storageWriteFailed,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.storageWriteFailed,
+        ),
+      ),
     );
     final ProfileContent after = await repository.read(first.id);
     expect(utf8.decode(after.content), '{"v":1}');
   });
 
-  test('E9 a corrupt profile answers storage_corrupt and can be restored',
-      () async {
-    final ProfileWriteResult first = await write('{"v":1}');
-    final ProfileWriteResult second = await repository.write(
-      id: first.id,
-      label: 'edit',
-      kind: 'local',
-      content: _bytes('{"v":2}'),
-      expectedRevision: first.revision,
-    );
-    host.corruptProfiles.add(first.id);
-    await expectLater(
-      repository.read(first.id),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.storageCorrupt,
-      )),
-    );
-    host.corruptProfiles.remove(first.id);
-    final ProfileWriteResult restored =
-        await repository.restore(first.id, first.revision);
-    expect(restored.revision, first.revision);
-    expect(second.revision, isNot(first.revision));
-  });
+  test(
+    'E9 a corrupt profile answers storage_corrupt and can be restored',
+    () async {
+      final ProfileWriteResult first = await write('{"v":1}');
+      final ProfileWriteResult second = await repository.write(
+        id: first.id,
+        label: 'edit',
+        kind: 'local',
+        content: _bytes('{"v":2}'),
+        expectedRevision: first.revision,
+      );
+      host.corruptProfiles.add(first.id);
+      await expectLater(
+        repository.read(first.id),
+        throwsA(
+          isA<HostError>().having(
+            (HostError error) => error.code,
+            'code',
+            HostErrorCode.storageCorrupt,
+          ),
+        ),
+      );
+      host.corruptProfiles.remove(first.id);
+      final ProfileWriteResult restored = await repository.restore(
+        first.id,
+        first.revision,
+      );
+      expect(restored.revision, first.revision);
+      expect(second.revision, isNot(first.revision));
+    },
+  );
 
   test('E10 a dropped channel surfaces transport_disconnected', () async {
-    host.failNext(BridgeMethod.serviceStatus, HostErrorCode.transportDisconnected);
+    host.failNext(
+      BridgeMethod.serviceStatus,
+      HostErrorCode.transportDisconnected,
+    );
     await expectLater(
       bridge.status(),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.transportDisconnected,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.transportDisconnected,
+        ),
+      ),
     );
   });
 
@@ -230,7 +266,9 @@ void main() {
       repository: repository,
     );
     await expectLater(
-      pipeline.prepare(const ImportRequest(source: ImportSource.qr, text: 'hello')),
+      pipeline.prepare(
+        const ImportRequest(source: ImportSource.qr, text: 'hello'),
+      ),
       throwsA(isA<ImportException>()),
     );
     expect(host.received, isEmpty);

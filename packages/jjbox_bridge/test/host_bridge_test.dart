@@ -50,9 +50,11 @@ void main() {
 
   test('runtime evidence drives the state and the event stream', () async {
     final Future<String> running = bridge.events
-        .where((event) =>
-            event.callback.type == 'service.state' &&
-            event.callback.data['state'] == 'running')
+        .where(
+          (event) =>
+              event.callback.type == 'service.state' &&
+              event.callback.data['state'] == 'running',
+        )
         .map((event) => event.callback.type)
         .first;
     await bridge.start(
@@ -91,22 +93,26 @@ void main() {
     host.failNext(BridgeMethod.configCheck, HostErrorCode.coreRejectedConfig);
     await expectLater(
       bridge.checkConfig(Uint8List.fromList(utf8.encode('{}'))),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.coreRejectedConfig,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.coreRejectedConfig,
+        ),
+      ),
     );
   });
 
   test('unknown methods answer unsupported_platform', () async {
     await expectLater(
       bridge.invoke('nope.nothing'),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.unsupportedPlatform,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.unsupportedPlatform,
+        ),
+      ),
     );
   });
 
@@ -117,14 +123,19 @@ void main() {
       timeout: const Duration(milliseconds: 30),
     );
     addTearDown(shortBridge.dispose);
-    slow.delayNext(BridgeMethod.serviceStatus, const Duration(milliseconds: 200));
+    slow.delayNext(
+      BridgeMethod.serviceStatus,
+      const Duration(milliseconds: 200),
+    );
     await expectLater(
       shortBridge.status(),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.timeout,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.timeout,
+        ),
+      ),
     );
   });
 
@@ -157,36 +168,43 @@ void main() {
         content: Uint8List.fromList(utf8.encode('{}')),
         expectedRevision: 'stale',
       ),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.revisionMismatch,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.revisionMismatch,
+        ),
+      ),
     );
   });
 
-  test('preview never carries item content, only endpoints and skips', () async {
-    final PreviewResult preview = await bridge.preview(
-      Uint8List.fromList(utf8.encode('vless://a\nvless://b\nssr://c')),
-    );
-    expect(preview.ok, isTrue);
-    expect(preview.count, 2);
-    expect(preview.declared, 3);
-    expect(preview.skipped.single.reason, contains('ssr'));
-    expect(preview.items.every((PreviewItem item) => !item.endpoint), isTrue);
-  });
+  test(
+    'preview never carries item content, only endpoints and skips',
+    () async {
+      final PreviewResult preview = await bridge.preview(
+        Uint8List.fromList(utf8.encode('vless://a\nvless://b\nssr://c')),
+      );
+      expect(preview.ok, isTrue);
+      expect(preview.count, 2);
+      expect(preview.declared, 3);
+      expect(preview.skipped.single.reason, contains('ssr'));
+      expect(preview.items.every((PreviewItem item) => !item.endpoint), isTrue);
+    },
+  );
 
   test('refresh reports supported separately from success', () async {
-    final ProviderRefreshResult result =
-        await bridge.refreshProviders(<String>['sub']);
+    final ProviderRefreshResult result = await bridge.refreshProviders(<String>[
+      'sub',
+    ]);
     expect(result.supported, isTrue);
     expect(result.refreshed, <String>['sub']);
   });
 
   test('callback gaps are detected for resync', () async {
     final List<bool> gaps = <bool>[];
-    final StreamSubscription<({HostCallback callback, bool gap})> sub =
-        bridge.events.listen((event) => gaps.add(event.gap));
+    final StreamSubscription<({HostCallback callback, bool gap})> sub = bridge
+        .events
+        .listen((event) => gaps.add(event.gap));
     addTearDown(sub.cancel);
     host.emitRaw('core.log', <String, Object?>{'level': 'info'});
     host.emitRaw('core.log', <String, Object?>{'level': 'warn'});

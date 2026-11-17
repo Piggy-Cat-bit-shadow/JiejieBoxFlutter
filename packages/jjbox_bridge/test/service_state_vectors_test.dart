@@ -29,8 +29,11 @@ void main() {
   ];
 
   test('the vector file is present and carries the contract ids', () async {
-    expect(vectorsFile.existsSync(), isTrue,
-        reason: 'run tests from packages/jjbox_bridge');
+    expect(
+      vectorsFile.existsSync(),
+      isTrue,
+      reason: 'run tests from packages/jjbox_bridge',
+    );
     final Map<String, Object?> payload =
         (jsonDecode(await vectorsFile.readAsString()) as Map<Object?, Object?>)
             .cast<String, Object?>();
@@ -49,15 +52,15 @@ void main() {
     final List<Object?> vectors = payload['vectors'] as List<Object?>;
 
     for (final Object? rawVector in vectors) {
-      final Map<String, Object?> vector =
-          (rawVector! as Map<Object?, Object?>).cast<String, Object?>();
+      final Map<String, Object?> vector = (rawVector! as Map<Object?, Object?>)
+          .cast<String, Object?>();
       final String id = vector['id'] as String;
       final HostServiceStateMachine machine = HostServiceStateMachine(
         permission: _permission(vector['permission'] as String?),
       );
       for (final Object? rawStep in vector['steps']! as List<Object?>) {
-        final Map<String, Object?> step =
-            (rawStep! as Map<Object?, Object?>).cast<String, Object?>();
+        final Map<String, Object?> step = (rawStep! as Map<Object?, Object?>)
+            .cast<String, Object?>();
         final int revision = (step['revision'] as num?)?.toInt() ?? 0;
         switch (step['op'] as String) {
           case 'start':

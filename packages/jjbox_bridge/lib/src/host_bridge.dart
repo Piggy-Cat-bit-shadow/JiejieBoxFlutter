@@ -110,27 +110,27 @@ class SetupRequest {
   final String platformMetadata;
 
   Map<String, Object?> toArgs() => <String, Object?>{
-        'basePath': basePath,
-        'workingPath': workingPath,
-        'tempPath': tempPath,
-        'appVersion': appVersion,
-        'appMarketingVersion': appMarketingVersion,
-        'logMaxLines': logMaxLines,
-        'debug': debug,
-        'commandServerSecret': commandServerSecret,
-        'oomKillerEnabled': oomKillerEnabled,
-        'oomMemoryLimitBytes': oomMemoryLimitBytes,
-        'platformMetadata': platformMetadata,
-      };
+    'basePath': basePath,
+    'workingPath': workingPath,
+    'tempPath': tempPath,
+    'appVersion': appVersion,
+    'appMarketingVersion': appMarketingVersion,
+    'logMaxLines': logMaxLines,
+    'debug': debug,
+    'commandServerSecret': commandServerSecret,
+    'oomKillerEnabled': oomKillerEnabled,
+    'oomMemoryLimitBytes': oomMemoryLimitBytes,
+    'platformMetadata': platformMetadata,
+  };
 }
 
 class StartAck {
   const StartAck({required this.accepted, required this.revision});
 
   factory StartAck.fromJson(Map<String, Object?> json) => StartAck(
-        accepted: json['accepted'] as bool? ?? false,
-        revision: (json['revision'] as num?)?.toInt() ?? 0,
-      );
+    accepted: json['accepted'] as bool? ?? false,
+    revision: (json['revision'] as num?)?.toInt() ?? 0,
+  );
 
   final bool accepted;
   final int revision;
@@ -211,10 +211,10 @@ class PreviewItem {
   });
 
   factory PreviewItem.fromJson(Map<String, Object?> json) => PreviewItem(
-        tag: json['tag'] as String? ?? '',
-        type: json['type'] as String? ?? '',
-        endpoint: json['endpoint'] as bool? ?? false,
-      );
+    tag: json['tag'] as String? ?? '',
+    type: json['type'] as String? ?? '',
+    endpoint: json['endpoint'] as bool? ?? false,
+  );
 
   final String tag;
   final String type;
@@ -225,9 +225,9 @@ class PreviewSkip {
   const PreviewSkip({required this.line, required this.reason});
 
   factory PreviewSkip.fromJson(Map<String, Object?> json) => PreviewSkip(
-        line: (json['line'] as num?)?.toInt() ?? 0,
-        reason: json['reason'] as String? ?? '',
-      );
+    line: (json['line'] as num?)?.toInt() ?? 0,
+    reason: json['reason'] as String? ?? '',
+  );
 
   final int line;
   final String reason;
@@ -256,14 +256,14 @@ class PreviewResult {
       declared: (json['declared'] as num?)?.toInt() ?? 0,
       base64: json['base64'] as bool? ?? false,
       items: <PreviewItem>[
-        for (final Object? item in (json['items'] as List<Object?>?) ??
-            const <Object?>[])
+        for (final Object? item
+            in (json['items'] as List<Object?>?) ?? const <Object?>[])
           if (item is Map<Object?, Object?>)
             PreviewItem.fromJson(item.cast<String, Object?>()),
       ],
       skipped: <PreviewSkip>[
-        for (final Object? item in (json['skipped'] as List<Object?>?) ??
-            const <Object?>[])
+        for (final Object? item
+            in (json['skipped'] as List<Object?>?) ?? const <Object?>[])
           if (item is Map<Object?, Object?>)
             PreviewSkip.fromJson(item.cast<String, Object?>()),
       ],
@@ -295,14 +295,14 @@ class ProfileMeta {
   });
 
   factory ProfileMeta.fromJson(Map<String, Object?> json) => ProfileMeta(
-        id: json['id'] as String? ?? '',
-        label: json['label'] as String? ?? '',
-        kind: json['kind'] as String? ?? 'local',
-        revision: json['revision'] as String? ?? '',
-        updatedAtMillis: (json['updatedAtMillis'] as num?)?.toInt() ?? 0,
-        source: json['source'] as String? ?? 'local',
-        bytes: (json['bytes'] as num?)?.toInt() ?? 0,
-      );
+    id: json['id'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+    kind: json['kind'] as String? ?? 'local',
+    revision: json['revision'] as String? ?? '',
+    updatedAtMillis: (json['updatedAtMillis'] as num?)?.toInt() ?? 0,
+    source: json['source'] as String? ?? 'local',
+    bytes: (json['bytes'] as num?)?.toInt() ?? 0,
+  );
 
   final String id;
   final String label;
@@ -322,8 +322,8 @@ class ProfileContent {
   });
 
   factory ProfileContent.fromJson(Map<String, Object?> json) {
-    final String encoded = json['content'] as String? ??
-        (json['contentB64'] as String? ?? '');
+    final String encoded =
+        json['content'] as String? ?? (json['contentB64'] as String? ?? '');
     return ProfileContent(
       id: json['id'] as String? ?? '',
       content: base64Decode(encoded),
@@ -369,11 +369,11 @@ class ApplyReport {
   });
 
   factory ApplyReport.fromJson(Map<String, Object?> json) => ApplyReport(
-        applied: json['applied'] as bool? ?? false,
-        requestId: json['requestId'] as String? ?? '',
-        coreMessage: json['coreMessage'] as String?,
-        switchedAtMillis: (json['switchedAtMillis'] as num?)?.toInt(),
-      );
+    applied: json['applied'] as bool? ?? false,
+    requestId: json['requestId'] as String? ?? '',
+    coreMessage: json['coreMessage'] as String?,
+    switchedAtMillis: (json['switchedAtMillis'] as num?)?.toInt(),
+  );
 
   final bool applied;
   final String requestId;
@@ -391,8 +391,8 @@ class ProviderRefreshResult {
 
   factory ProviderRefreshResult.fromJson(Map<String, Object?> json) {
     final Map<String, String> failed = <String, String>{};
-    for (final Object? entry in (json['failed'] as List<Object?>?) ??
-        const <Object?>[]) {
+    for (final Object? entry
+        in (json['failed'] as List<Object?>?) ?? const <Object?>[]) {
       if (entry is Map<Object?, Object?>) {
         final Map<String, Object?> row = entry.cast<String, Object?>();
         failed[row['tag'] as String? ?? ''] = row['message'] as String? ?? '';
@@ -401,8 +401,8 @@ class ProviderRefreshResult {
     return ProviderRefreshResult(
       supported: json['supported'] as bool? ?? false,
       refreshed: <String>[
-        for (final Object? tag in (json['refreshed'] as List<Object?>?) ??
-            const <Object?>[])
+        for (final Object? tag
+            in (json['refreshed'] as List<Object?>?) ?? const <Object?>[])
           if (tag is String) tag,
       ],
       failed: failed,
@@ -460,9 +460,9 @@ class QrScanResult {
   const QrScanResult({this.text, this.cancelled = false});
 
   factory QrScanResult.fromJson(Map<String, Object?> json) => QrScanResult(
-        text: json['text'] as String?,
-        cancelled: json['cancelled'] as bool? ?? false,
-      );
+    text: json['text'] as String?,
+    cancelled: json['cancelled'] as bool? ?? false,
+  );
 
   final String? text;
   final bool cancelled;
@@ -645,11 +645,10 @@ class HostBridge {
       );
 
   Future<List<ProfileMeta>> listProfiles() async {
-    final Map<String, Object?> json =
-        await invoke(BridgeMethod.profileList);
+    final Map<String, Object?> json = await invoke(BridgeMethod.profileList);
     return <ProfileMeta>[
-      for (final Object? item in (json['items'] as List<Object?>?) ??
-          const <Object?>[])
+      for (final Object? item
+          in (json['items'] as List<Object?>?) ?? const <Object?>[])
         if (item is Map<Object?, Object?>)
           ProfileMeta.fromJson(item.cast<String, Object?>()),
     ];
@@ -730,26 +729,25 @@ class HostBridge {
     required int port,
     List<String> bypass = const <String>[],
   }) async {
-    final Map<String, Object?> json =
-        await invoke(BridgeMethod.systemProxyApply, <String, Object?>{
-      'enabled': enabled,
-      'port': port,
-      'bypass': bypass,
-    });
+    final Map<String, Object?> json = await invoke(
+      BridgeMethod.systemProxyApply,
+      <String, Object?>{'enabled': enabled, 'port': port, 'bypass': bypass},
+    );
     return json['applied'] as bool? ?? false;
   }
 
   Future<SystemProxyStatus> systemProxyStatus() async =>
-      SystemProxyStatus.fromJson(
-        await invoke(BridgeMethod.systemProxyStatus),
-      );
+      SystemProxyStatus.fromJson(await invoke(BridgeMethod.systemProxyStatus));
 
   Future<PermissionResult> requestTunPermission() async =>
       PermissionResult.fromJson(
         await invoke(BridgeMethod.tunRequestPermission),
       );
 
-  Future<QrScanResult> scanQr({String source = 'camera', String? imagePath}) async {
+  Future<QrScanResult> scanQr({
+    String source = 'camera',
+    String? imagePath,
+  }) async {
     return QrScanResult.fromJson(
       await invoke(BridgeMethod.qrScan, <String, Object?>{
         'source': source,
@@ -762,11 +760,10 @@ class HostBridge {
     List<String> accept = const <String>['json', 'yaml', 'bpf', 'txt'],
     int maxBytes = 8 * 1024 * 1024,
   }) async {
-    final Map<String, Object?> json =
-        await invoke(BridgeMethod.filePickConfig, <String, Object?>{
-      'accept': accept,
-      'maxBytes': maxBytes,
-    });
+    final Map<String, Object?> json = await invoke(
+      BridgeMethod.filePickConfig,
+      <String, Object?>{'accept': accept, 'maxBytes': maxBytes},
+    );
     if (json.isEmpty || json['name'] == null) {
       return null;
     }
@@ -779,10 +776,10 @@ class HostBridge {
       );
 
   Future<bool> setAutoLaunch(bool enabled) async {
-    final Map<String, Object?> json =
-        await invoke(BridgeMethod.appSetAutoLaunch, <String, Object?>{
-      'enabled': enabled,
-    });
+    final Map<String, Object?> json = await invoke(
+      BridgeMethod.appSetAutoLaunch,
+      <String, Object?>{'enabled': enabled},
+    );
     return json['enabled'] as bool? ?? false;
   }
 

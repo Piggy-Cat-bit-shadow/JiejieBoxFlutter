@@ -5,13 +5,7 @@
 library;
 
 /// The five classes an A-side page renders copy for.
-enum AppErrorClass {
-  invalidConfig,
-  unsupported,
-  timeout,
-  io,
-  internal,
-}
+enum AppErrorClass { invalidConfig, unsupported, timeout, io, internal }
 
 /// One bridge error code with its retryability and A-class projection.
 enum HostErrorCode {
@@ -31,11 +25,7 @@ enum HostErrorCode {
     false,
     AppErrorClass.unsupported,
   ),
-  providerRefreshFailed(
-    'provider_refresh_failed',
-    true,
-    AppErrorClass.io,
-  ),
+  providerRefreshFailed('provider_refresh_failed', true, AppErrorClass.io),
   storageWriteFailed('storage_write_failed', true, AppErrorClass.io),
   storageCorrupt('storage_corrupt', false, AppErrorClass.io),
   revisionMismatch('revision_mismatch', true, AppErrorClass.invalidConfig),
@@ -88,7 +78,7 @@ class HostError implements Exception {
     final HostErrorCode code = HostErrorCode.parseOrInternal(rawCode);
     final Map<String, Object?> details =
         (json['details'] as Map<Object?, Object?>?)?.cast<String, Object?>() ??
-            const <String, Object?>{};
+        const <String, Object?>{};
     return HostError(
       code: code,
       message: json['message'] as String? ?? code.wireName,
@@ -111,11 +101,11 @@ class HostError implements Exception {
   AppErrorClass get appClass => code.appClass;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'code': wireName,
-        'message': message,
-        'retryable': retryable,
-        'details': details,
-      };
+    'code': wireName,
+    'message': message,
+    'retryable': retryable,
+    'details': details,
+  };
 
   @override
   String toString() => 'HostError($wireName, $message)';
