@@ -62,6 +62,8 @@ void main() {
     int port = 0,
   }) async {
     final Process started = await Process.start(exe, <String>[
+      '--pipe',
+      '',
       '--listen',
       '127.0.0.1:$port',
       '--data',
@@ -74,8 +76,8 @@ void main() {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((String line) {
-          if (line.startsWith('LISTEN ') && !completer.isCompleted) {
-            final String address = line.substring(7).trim();
+          if (line.startsWith('LISTEN tcp:') && !completer.isCompleted) {
+            final String address = line.substring('LISTEN tcp:'.length).trim();
             final int split = address.lastIndexOf(':');
             completer.complete((
               host: address.substring(0, split),

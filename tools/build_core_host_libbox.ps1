@@ -37,6 +37,8 @@ $header = @(
   "go 1.25.5",
   "",
   "require github.com/sagernet/sing-box v0.0.0",
+  "require github.com/Microsoft/go-winio v0.6.4",
+  "require golang.org/x/sys v0.49.0",
   "",
   "replace github.com/sagernet/sing-box => $Kernel",
   ""

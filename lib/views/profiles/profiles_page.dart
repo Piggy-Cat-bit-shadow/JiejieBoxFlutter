@@ -214,6 +214,7 @@ class ProfileItem extends StatelessWidget {
               ? null
               : Row(
                   mainAxisSize: MainAxisSize.min,
+                  spacing: 8,
                   children: [
                     if (profile.updatedAtMillis != 0)
                       Text(

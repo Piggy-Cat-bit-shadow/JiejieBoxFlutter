@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:jjbox_bridge/jjbox_bridge.dart' as jb;
@@ -45,6 +46,8 @@ class CoreConnection extends ChangeNotifier {
   int _revision = 0;
   jb.RuntimeStatus? _status;
   StreamSubscription<({jb.HostCallback callback, bool gap})>? _events;
+  Timer? _poll;
+  bool _disposed = false;
 
   CoreServiceState get state => _state;
   String? get reason => _reason;
@@ -64,6 +67,14 @@ class CoreConnection extends ChangeNotifier {
         unawaited(refresh());
       }
     });
+    // The Windows plugin's callback pump is still being finished, so a periodic
+    // status poll keeps the shell truthful even when an event frame is missed.
+    // Widget tests drive refresh() themselves and must not be left with a timer.
+    if (Platform.environment['FLUTTER_TEST'] != 'true') {
+      _poll = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (!_disposed) unawaited(refresh());
+      });
+    }
   }
 
   void _set(CoreServiceState next, {String? reason}) {
@@ -89,6 +100,7 @@ class CoreConnection extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     final bridge = host;
     if (bridge != null) {
       try {
@@ -237,6 +249,8 @@ class CoreConnection extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _poll?.cancel();
     _events?.cancel();
     super.dispose();
   }
