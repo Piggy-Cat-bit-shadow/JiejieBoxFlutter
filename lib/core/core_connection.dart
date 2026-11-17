@@ -12,6 +12,7 @@ enum CoreServiceState {
   unavailable,
   stopped,
   starting,
+  awaitingPermission,
   running,
   stopping,
   failed,
@@ -87,6 +88,8 @@ class CoreConnection extends ChangeNotifier {
   CoreServiceState _mapState(String wire) => switch (wire) {
     'running' => CoreServiceState.running,
     'starting' => CoreServiceState.starting,
+    'awaitingPermission' => CoreServiceState.awaitingPermission,
+    'awaitingpermission' => CoreServiceState.awaitingPermission,
     'stopping' => CoreServiceState.stopping,
     'stopped' => CoreServiceState.stopped,
     'idle' => CoreServiceState.stopped,
@@ -138,8 +141,7 @@ class CoreConnection extends ChangeNotifier {
         _set(CoreServiceState.failed, reason: 'no profile selected');
         return false;
       }
-      final String resolvedMode =
-          mode ?? (Platform.isWindows ? 'proxy' : 'vpn');
+      final String resolvedMode = mode ?? _defaultServiceMode();
       _set(CoreServiceState.starting);
       try {
         final ack = await bridge.start(
@@ -219,6 +221,22 @@ class CoreConnection extends ChangeNotifier {
 
   Future<List<jb.ProfileMeta>> listProfiles() => _requireHost().listProfiles();
 
+  Future<jb.ProfileContent> readProfile(String id) =>
+      _requireHost().readProfile(id);
+
+  Future<jb.PickedFile?> pickConfig() => _requireHost().pickConfig();
+
+  Future<String> _modeForHost(jb.HostBridge bridge) async {
+    try {
+      final jb.HostCapabilities caps = await bridge.capabilities();
+      if (caps.serviceModes.contains('vpn')) return 'vpn';
+      if (caps.serviceModes.contains('proxy')) return 'proxy';
+    } on Object {
+      // Fall through to the platform default.
+    }
+    return _defaultServiceMode();
+  }
+
   Future<jb.ProfileWriteResult> writeProfile({
     String? id,
     required String label,
@@ -246,7 +264,7 @@ class CoreConnection extends ChangeNotifier {
       id: id,
       revision: revision,
       requestId: '${DateTime.now().microsecondsSinceEpoch}',
-      mode: Platform.isWindows ? 'proxy' : 'vpn',
+      mode: await _modeForHost(_requireHost()),
     );
     // The host advances its own intent revision on apply; refresh so a later
     // stop uses a revision newer than the one the apply consumed.
@@ -264,4 +282,11 @@ class CoreConnection extends ChangeNotifier {
     _events?.cancel();
     super.dispose();
   }
+}
+
+String _defaultServiceMode() {
+  // Windows and macOS expose a proxy core. Android has a VpnService/TUN path
+  // when the AAR is linked; iOS is always a Network Extension TUN.
+  if (Platform.isAndroid || Platform.isIOS) return 'vpn';
+  return 'proxy';
 }

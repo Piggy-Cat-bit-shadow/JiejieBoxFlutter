@@ -33,3 +33,6 @@ Thumbs.db
 # C host build outputs
 windows/core_host/*.exe
 windows/core_host/*.exe~
+
+# The kernel AAR is a build artifact (124 MB); stage it with tools/build_libbox.
+android/app/libs/*.aar

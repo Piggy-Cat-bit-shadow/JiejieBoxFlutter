@@ -5,16 +5,16 @@ import 'package:jiejiebox_flutter/features/form/form_page.dart';
 import 'package:jiejiebox_flutter/state/app_state.dart';
 
 void main() {
-  test('rename keeps id/subtitle and ignores empty names', () {
+  test('rename keeps id/subtitle and ignores empty names', () async {
     final state = AppState(seedProfiles: true);
-    state.renameProfile('demo-1', 'Work');
+    await state.renameProfile('demo-1', 'Work');
     expect(state.profiles.first.label, 'Work');
     expect(state.profiles.first.id, 'demo-1');
-    state.renameProfile('demo-1', '   ');
+    await state.renameProfile('demo-1', '   ');
     expect(state.profiles.first.label, 'Work');
   });
 
-  test('delete removes the draft and clears selection', () {
+  test('delete removes the draft and selects the next profile', () {
     final state = AppState(seedProfiles: true);
     final id = state.addProfileDraft(
       label: 'draft',
@@ -26,7 +26,7 @@ void main() {
     state.deleteProfile(id);
     expect(state.profiles.any((profile) => profile.id == id), isFalse);
     expect(state.drafts.containsKey(id), isFalse);
-    expect(state.selectedProfileId, isNull);
+    expect(state.selectedProfileId, 'demo-1');
   });
 
   testWidgets('two template imports get distinct default labels', (

@@ -14,6 +14,8 @@ import java.security.MessageDigest
  * the service lifecycle. The core itself sits behind [JjboxCore] so the shell can
  * answer `unsupported_platform` and report core:false before the AAR is linked.
  */
+class JjboxCorruptProfileException(message: String) : Exception(message)
+
 class JjboxHost(
     private val context: Context,
     private val emit: (JSONObject) -> Unit,
@@ -23,6 +25,18 @@ class JjboxHost(
     private var activeId: String? = null
     private var activeRevision: String? = null
     private var activeContent: String? = null
+    private var activeMode: String = "proxy"
+
+    init {
+        // The Dart launch path does not always send host.setup before probing
+        // capabilities. Give the core a process-private directory now, so a
+        // real AAR can start without waiting for that optional call.
+        JjboxCore.setup(
+            JSONObject()
+                .put("basePath", File(context.filesDir, "core").absolutePath)
+                .put("appVersion", ""),
+        )
+    }
 
     fun detach() = Unit
 
@@ -42,10 +56,14 @@ class JjboxHost(
         "host.capabilities" -> ok(capabilities())
         "core.capabilities" -> ok(JjboxCore.capabilities())
         "host.setup" -> {
-            JjboxCore.setup(args)
+            // Android always uses the app-private files directory configured in
+            // init; a Dart temp path must not replace it.
             ok(JSONObject())
         }
         "host.shutdown" -> {
+            if (activeMode == "vpn") {
+                context.startService(JjboxVpnService.intent(context, JjboxVpnService.ACTION_STOP))
+            }
             runCatching { JjboxCore.stopService() }
             lifetime.close(lifetime.revision + 1)
             lifetime.runtimeReport(false, lifetime.revision)
@@ -89,9 +107,6 @@ class JjboxHost(
     private fun serviceStart(args: JSONObject): JSONObject {
         val revision = args.optInt("revision", 0)
         val mode = args.optString("mode", "proxy")
-        if (mode != "proxy") {
-            return error("unsupported_platform", "this build only exposes proxy mode", false)
-        }
         val id = args.optString("profileId")
         val profileRevision = args.optString("profileRevision")
         val profile = readProfile(id) ?: return error("profile_not_found", "profile not found: $id", false)
@@ -100,6 +115,36 @@ class JjboxHost(
         }
         return runCatching {
             JjboxCore.checkConfig(profile.content)
+            if (mode == "vpn") {
+                if (!JjboxCore.isLoaded) {
+                    return error("core_unavailable", "libbox AAR is not linked into this build", false)
+                }
+                val prepare = android.net.VpnService.prepare(context)
+                val outcome = lifetime.start(revision, prepare != null)
+                if (outcome.startsWith("rejected:")) {
+                    return error(outcome.removePrefix("rejected:"), "revision is older than the last accepted intent", false)
+                }
+                activeId = profile.id
+                activeRevision = profile.revision
+                activeContent = profile.content
+                activeMode = mode
+                if (prepare != null) {
+                    prepare.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(prepare)
+                    emit(stateEvent())
+                    return ok(JSONObject().put("accepted", true).put("revision", revision))
+                }
+                context.startService(
+                    JjboxVpnService.intent(context, JjboxVpnService.ACTION_START)
+                        .putExtra(JjboxVpnService.EXTRA_MODE, mode)
+                        .putExtra(JjboxVpnService.EXTRA_CONFIG, profile.content),
+                )
+                emit(stateEvent())
+                return ok(JSONObject().put("accepted", true).put("revision", revision))
+            }
+            if (mode != "proxy") {
+                return error("unsupported_platform", "unknown service mode $mode", false)
+            }
             val wasRunning = JjboxCore.isRunning()
             val previous = activeContent
             try {
@@ -119,6 +164,7 @@ class JjboxHost(
             activeId = profile.id
             activeRevision = profile.revision
             activeContent = profile.content
+            activeMode = mode
             emit(stateEvent())
             ok(JSONObject().put("accepted", true).put("revision", revision))
         }.getOrElse { failure ->
@@ -137,6 +183,9 @@ class JjboxHost(
             return error("closed", "host is shutting down", false)
         }
         return runCatching {
+            if (activeMode == "vpn") {
+                context.startService(JjboxVpnService.intent(context, JjboxVpnService.ACTION_STOP))
+            }
             JjboxCore.stopService()
             lifetime.runtimeReport(false, revision)
             emit(stateEvent())
@@ -148,13 +197,34 @@ class JjboxHost(
         }
     }
 
-    private fun status(): JSONObject = lifetime.statusJson()
-        .put("sinceMillis", 0)
-        .put("mode", "proxy")
-        .put("tunActive", false)
-        .put("permission", if (JjboxCore.vpnPermissionGranted) "granted" else "unrequested")
-        .put("profileId", activeId ?: JSONObject.NULL)
-        .put("profileRev", activeRevision ?: JSONObject.NULL)
+    private fun status(): JSONObject {
+        val failure = JjboxCore.consumeFailure()
+        if (failure != null) {
+            lifetime.failPending(failure)
+        }
+        if (activeMode == "vpn") {
+            if (JjboxCore.vpnPermissionGranted && JjboxCore.isRunning()) {
+                lifetime.permissionReport(true)
+            }
+            if (JjboxCore.isRunning() &&
+                lifetime.state != JjboxLifetime.State.RUNNING
+            ) {
+                lifetime.runtimeReport(true)
+            }
+            if (!JjboxCore.isRunning() &&
+                lifetime.state == JjboxLifetime.State.RUNNING
+            ) {
+                lifetime.runtimeReport(false)
+            }
+        }
+        return lifetime.statusJson()
+            .put("sinceMillis", 0)
+            .put("mode", activeMode)
+            .put("tunActive", activeMode == "vpn" && JjboxCore.isRunning())
+            .put("permission", if (JjboxCore.vpnPermissionGranted) "granted" else "unrequested")
+            .put("profileId", activeId ?: JSONObject.NULL)
+            .put("profileRev", activeRevision ?: JSONObject.NULL)
+    }
 
     private fun stateEvent(): JSONObject = JSONObject()
         .put("type", "service.state")
@@ -166,7 +236,7 @@ class JjboxHost(
 
     private fun capabilities(): JSONObject = JSONObject()
         .put("core", JjboxCore.isLoaded)
-        .put("tun", false)
+        .put("tun", JjboxCore.isLoaded)
         .put("systemProxy", false)
         .put("perAppProxy", false)
         .put("autostart", false)
@@ -179,7 +249,11 @@ class JjboxHost(
         .put("deepLink", false)
         .put("memoryPressure", false)
         .put("events", false)
-        .put("serviceModes", JSONArray().put("proxy"))
+        .put(
+            "serviceModes",
+            if (JjboxCore.isLoaded) JSONArray().put("vpn").put("proxy")
+            else JSONArray().put("proxy"),
+        )
 
     /**
      * Reads the clipboard only. Promotion still requires an explicit user action and
@@ -291,7 +365,8 @@ class JjboxHost(
         return ok(JSONObject())
     }
 
-    private fun profileApply(args: JSONObject): JSONObject {        val id = args.optString("id")
+    private fun profileApply(args: JSONObject): JSONObject {
+        val id = args.optString("id")
         val expectedRevision = args.optString("revision")
         val profile = readProfile(id) ?: return error("profile_not_found", "profile not found: $id", false)
         if (profile.revision != expectedRevision) {
@@ -301,21 +376,27 @@ class JjboxHost(
             JjboxCore.checkConfig(profile.content)
             val previous = activeContent
             val wasRunning = JjboxCore.isRunning()
-            try {
-                JjboxCore.startService(profile.content)
-            } catch (failure: CoreException) {
-                if (wasRunning && previous != null) {
-                    runCatching { JjboxCore.startService(previous) }
+            if (wasRunning) {
+                try {
+                    JjboxCore.startService(profile.content)
+                } catch (failure: CoreException) {
+                    if (previous != null) {
+                        runCatching { JjboxCore.startService(previous) }
+                    }
+                    return error(failure.code, failure.message, true)
                 }
-                return error(failure.code, failure.message, true)
             }
             val nextRevision = lifetime.revision + 1
-            val outcome = lifetime.start(nextRevision, false)
-            if (outcome == "rejected:closed") {
-                JjboxCore.stopService()
-                return error("closed", "host is shutting down", false)
+            if (wasRunning) {
+                val outcome = lifetime.start(nextRevision, false)
+                if (outcome == "rejected:closed") {
+                    JjboxCore.stopService()
+                    return error("closed", "host is shutting down", false)
+                }
+                lifetime.runtimeReport(true, nextRevision)
+            } else {
+                lifetime.selectProfile(nextRevision)
             }
-            lifetime.runtimeReport(true, nextRevision)
             activeId = profile.id
             activeRevision = profile.revision
             activeContent = profile.content
@@ -352,7 +433,17 @@ class JjboxHost(
     private fun readMeta(id: String): JSONObject? {
         val file = File(profilesDir, "$id.meta.json")
         if (!file.exists()) return null
-        return runCatching { JSONObject(file.readText()) }.getOrNull()
+        return readMetaFile(file)
+    }
+
+    private fun readMetaFile(file: File): JSONObject {
+        return try {
+            JSONObject(file.readText())
+        } catch (error: Exception) {
+            throw JjboxCorruptProfileException(
+                "profile metadata ${file.name} is corrupt: ${error.message}",
+            )
+        }
     }
 
     private fun coreCall(block: () -> JSONObject): JSONObject {

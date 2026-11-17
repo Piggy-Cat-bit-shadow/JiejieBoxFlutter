@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
@@ -48,18 +51,22 @@ class AddProfileMenu extends StatelessWidget {
       ImportSource.link => 'link',
       ImportSource.clipboard => 'clipboard',
       ImportSource.template => 'template',
+      ImportSource.file => 'file',
     };
     if (state.connection.isAvailable && state.connection.hasRealHost) {
-      final id = await state.importConfig(
-        label: draft.label,
-        content: draft.text,
-        kind: switch (draft.format) {
-          ImportFormat.clashYaml => 'clash-yaml',
-          ImportFormat.sip008 => 'sip008',
-          ImportFormat.shareLinks || ImportFormat.base64Links => 'link-list',
-          _ => 'singbox-json',
-        },
-      );
+      final String? id = draft.format == ImportFormat.subscriptionUrl
+          ? await state.importSubscription(url: draft.text, label: draft.label)
+          : await state.importConfig(
+              label: draft.label,
+              content: draft.text,
+              kind: switch (draft.format) {
+                ImportFormat.clashYaml => 'clash-yaml',
+                ImportFormat.sip008 => 'sip008',
+                ImportFormat.shareLinks ||
+                ImportFormat.base64Links => 'link-list',
+                _ => 'singbox-json',
+              },
+            );
       if (id != null) {
         state.noteAddIntent('${source.name}:${draft.format.name}');
       }
@@ -83,6 +90,24 @@ class AddProfileMenu extends StatelessWidget {
     state.noteAddIntent('${source.name}:${draft.format.name}');
   }
 
+  Future<void> _openFile(BuildContext context) async {
+    final state = AppStateScope.read(context);
+    try {
+      final file = await state.connection.pickConfig();
+      final bytes = file?.bytes;
+      if (file == null || bytes == null || !context.mounted) return;
+      final name = file.name.replaceFirst(RegExp(r'\.[^.]+$'), '');
+      await _open(
+        context,
+        source: ImportSource.file,
+        initialText: utf8.decode(bytes, allowMalformed: true),
+        initialLabel: name,
+      );
+    } on Object catch (error) {
+      state.reportError('$error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.appLocalizations;
@@ -99,6 +124,9 @@ class AddProfileMenu extends StatelessWidget {
             glyph: AppGlyphs.importFile,
             label: l10n.file,
             subtitle: 'Platform file picker (C)',
+            onPressed: defaultTargetPlatform == TargetPlatform.windows
+                ? () => _openFile(context)
+                : null,
           ),
           PopupMenuItem(
             glyph: AppGlyphs.cloudDownload,

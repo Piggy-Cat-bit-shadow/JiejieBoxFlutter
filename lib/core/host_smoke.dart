@@ -5,6 +5,7 @@ import 'package:jjbox_bridge/jjbox_bridge.dart' as jb;
 
 import 'core_connection.dart';
 import 'core_runtime.dart';
+import '../state/app_state.dart';
 
 /// Debug-only end-to-end probe used by the Windows build verifier.
 ///
@@ -71,6 +72,80 @@ Future<void> runHostSmoke() async {
             stopped;
       } finally {
         connection.dispose();
+      }
+
+      // Real node-list import: the kernel parses a share link, the UI assembles
+      // a complete profile, and the core accepts/starts it.
+      final jb.PreviewResult linkPreview = await host.preview(
+        utf8.encode('ss://YWVzLTEyOC1nY206cGFzcw@127.0.0.1:8388#smoke'),
+      );
+      final String? composed = composeImportedConfig(
+        linkPreview,
+        listenPort: 0,
+      );
+      result['linkPreviewOk'] = linkPreview.ok;
+      result['linkItems'] = linkPreview.items.length;
+      result['linkComposed'] = composed != null;
+      if (composed != null) {
+        final jb.ConfigCheckResult check = await host.checkConfig(
+          utf8.encode(composed),
+        );
+        result['linkCheck'] = check.ok;
+        final jb.ProfileWriteResult linkProfile = await host.writeProfile(
+          label: 'app-smoke-link',
+          kind: 'singbox-json',
+          content: utf8.encode(composed),
+        );
+        final jb.StartAck linkAck = await host.start(
+          revision: 4,
+          mode: 'proxy',
+          profileId: linkProfile.id,
+          profileRevision: linkProfile.revision,
+        );
+        final jb.StartAck linkStop = await host.stop(revision: 5);
+        result['linkStart'] = linkAck.accepted;
+        result['linkStop'] = linkStop.accepted;
+        result['ok'] =
+            result['ok'] == true &&
+            linkPreview.ok &&
+            check.ok &&
+            linkAck.accepted &&
+            linkStop.accepted;
+      } else {
+        result['ok'] = false;
+        result['error'] = 'link list could not be composed';
+      }
+
+      // The real UI path: AppState import classifies/composes/validates, then
+      // its CoreConnection starts and stops the selected profile.
+      final AppState ui = AppState(
+        coreConnection: CoreConnection(bridge: runtime.bridge, host: host),
+      );
+      try {
+        await ui.connection.refresh();
+        final String? imported = await ui.importConfig(
+          label: 'app-smoke-ui-import',
+          content: 'ss://YWVzLTEyOC1nY206cGFzcw@127.0.0.1:8388#ui-import',
+          kind: 'link-list',
+        );
+        result['uiImport'] = imported != null;
+        if (imported != null) {
+          final bool uiStarted = await ui.startService();
+          final bool uiStopped = await ui.stopService();
+          result['uiStart'] = uiStarted;
+          result['uiStop'] = uiStopped;
+          result['uiIdleState'] = ui.connection.state.name;
+          result['ok'] =
+              result['ok'] == true &&
+              uiStarted &&
+              uiStopped &&
+              ui.connection.state.name == 'stopped';
+        } else {
+          result['ok'] = false;
+          result['error'] = ui.lastActionError ?? 'UI import failed';
+        }
+      } finally {
+        ui.dispose();
       }
     }
   } on Object catch (error) {

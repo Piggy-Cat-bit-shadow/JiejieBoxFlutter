@@ -46,3 +46,10 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    val libbox = file("libs/libbox.aar")
+    if (libbox.exists()) {
+        implementation(files(libbox))
+    }
+}

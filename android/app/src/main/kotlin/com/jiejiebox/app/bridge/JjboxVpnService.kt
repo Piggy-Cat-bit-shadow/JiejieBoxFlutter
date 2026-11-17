@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.ParcelFileDescriptor
 
 /**
  * The minimal VPN shell: foreground service first, then the TUN descriptor, then
@@ -30,6 +31,7 @@ class JjboxVpnService : VpnService() {
             else -> startTun(
                 intent?.getStringExtra(EXTRA_MODE) ?: "vpn",
                 intent?.getIntExtra(EXTRA_MTU, 0) ?: 0,
+                intent?.getStringExtra(EXTRA_CONFIG) ?: "",
             )
         }
         return START_NOT_STICKY
@@ -46,17 +48,23 @@ class JjboxVpnService : VpnService() {
         super.onDestroy()
     }
 
-    private fun startTun(mode: String, mtu: Int) {
+    private fun startTun(mode: String, mtu: Int, config: String) {
         if (mode != "vpn") {
             // Proxy-only mode: no TUN, the mixed listener is enough.
             return
         }
-        if (prepare(this) != null) {
+        if (config.isBlank()) {
+            JjboxCore.reportFailure("VPN config is empty")
             JjboxCore.vpnPermissionGranted = false
             stopSelf()
             return
         }
-        JjboxCore.vpnPermissionGranted = true
+        if (prepare(this) != null) {
+            JjboxCore.reportFailure("VPN permission was not granted")
+            JjboxCore.vpnPermissionGranted = false
+            stopSelf()
+            return
+        }
         val fd = try {
             Builder()
                 .setSession("JiejieBox")
@@ -72,17 +80,32 @@ class JjboxVpnService : VpnService() {
         }
         // A rejected descriptor must tear the VPN down rather than report a start
         // that only looks successful.
-        if (fd == null || !JjboxCore.openTun(fd)) {
+        if (fd == null) {
+            JjboxCore.reportFailure("VPN descriptor could not be established")
+            JjboxCore.vpnPermissionGranted = false
             stopTun()
             stopSelf()
             return
         }
-        established = true
+        JjboxCore.vpnPermissionGranted = true
+        JjboxCore.attachTun(fd)
+        try {
+            JjboxCore.startService(config)
+            established = true
+        } catch (error: Exception) {
+            JjboxCore.clearTun()
+            JjboxCore.vpnPermissionGranted = false
+            JjboxCore.reportFailure(error.message ?: "VPN core start failed")
+            runCatching { ParcelFileDescriptor.adoptFd(fd).close() }
+            stopTun()
+            stopSelf()
+        }
     }
 
     private fun stopTun() {
         if (established) {
-            JjboxCore.closeTun()
+            runCatching { JjboxCore.stopService() }
+            JjboxCore.clearTun()
             established = false
         }
     }
@@ -110,7 +133,7 @@ class JjboxVpnService : VpnService() {
         return builder
             .setContentTitle("JiejieBox")
             .setContentText("Running")
-            .setSmallIcon(android.R.drawable.stat_sys_vpn_ic)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .build()
@@ -121,6 +144,7 @@ class JjboxVpnService : VpnService() {
         const val ACTION_STOP = "com.jiejiebox.app.bridge.STOP"
         const val EXTRA_MODE = "mode"
         const val EXTRA_MTU = "mtu"
+        const val EXTRA_CONFIG = "config"
         private const val CHANNEL = "jjbox-service"
         private const val NOTIFICATION_ID = 1
 

@@ -42,6 +42,9 @@ type hostServer struct {
 	opMu   sync.Mutex
 	active appliedProfile
 	mode   string
+	// proxyPort is the first positive listen_port in the applied document. Zero
+	// means "not known"; the host never invents a port.
+	proxyPort int
 }
 
 func newHostServer(store *profileStore, core coreAPI) *hostServer {
@@ -163,6 +166,7 @@ func (s *hostServer) Handle(req request) response {
 		s.sm.runtimeReport(true, revision)
 		s.active = profile
 		s.mode = mode
+		s.proxyPort = parseListenPort(profile.content)
 		s.emit("service.state", s.status())
 		return ok(req.ID, map[string]any{
 			"accepted": true,
@@ -307,6 +311,9 @@ func (s *hostServer) Handle(req request) response {
 	case "profile.apply":
 		s.opMu.Lock()
 		defer s.opMu.Unlock()
+		if s.sm.closed {
+			return fail(req.ID, &bridgeError{Code: "closed", Message: "host is shutting down", Retryable: false})
+		}
 		id := argString(req.Args, "id")
 		expectedRevision := argString(req.Args, "revision")
 		if mode := argString(req.Args, "mode"); mode == "vpn" {
@@ -331,32 +338,39 @@ func (s *hostServer) Handle(req request) response {
 		}
 		previous := s.active
 		wasRunning := s.core.Running()
-		if startErr := s.core.StartService(content); startErr != nil {
-			// The kernel keeps the old instance when a reload is rejected, but a
-			// failed cold start leaves nothing running. Re-apply the last known
-			// good document so the UI is never told "new config" while the old
-			// proxy silently died.
-			if wasRunning && previous.content != "" {
-				if rollbackErr := s.core.StartService(previous.content); rollbackErr != nil {
-					startErr.Details = map[string]any{
-						"rollbackFailed": true,
-						"rollbackError":  rollbackErr.Message,
+		if wasRunning {
+			if startErr := s.core.StartService(content); startErr != nil {
+				// The kernel keeps the old instance when a reload is rejected, but a
+				// failed cold start leaves nothing running. Re-apply the last known
+				// good document so the UI is never told "new config" while the old
+				// proxy silently died.
+				if previous.content != "" {
+					if rollbackErr := s.core.StartService(previous.content); rollbackErr != nil {
+						startErr.Details = map[string]any{
+							"rollbackFailed": true,
+							"rollbackError":  rollbackErr.Message,
+						}
+					} else {
+						startErr.Details = map[string]any{"rolledBack": true}
 					}
-				} else {
-					startErr.Details = map[string]any{"rolledBack": true}
 				}
+				return fail(req.ID, startErr)
 			}
-			return fail(req.ID, startErr)
 		}
 		nextRevision := s.sm.revision + 1
-		outcome := s.sm.start(nextRevision, false)
-		if outcome == "rejected:closed" {
-			_ = s.core.StopService()
-			return fail(req.ID, &bridgeError{Code: "closed", Message: "host is shutting down", Retryable: false})
+		if wasRunning {
+			outcome := s.sm.start(nextRevision, false)
+			if outcome == "rejected:closed" {
+				_ = s.core.StopService()
+				return fail(req.ID, &bridgeError{Code: "closed", Message: "host is shutting down", Retryable: false})
+			}
+			s.sm.runtimeReport(true, nextRevision)
+		} else {
+			s.sm.selectProfile(nextRevision)
 		}
-		s.sm.runtimeReport(true, nextRevision)
 		s.active = appliedProfile{id: meta.ID, revision: meta.Revision, content: content}
 		s.mode = "proxy"
+		s.proxyPort = parseListenPort(content)
 		s.emit("service.state", s.status())
 		return ok(req.ID, map[string]any{
 			"applied":          true,
@@ -448,13 +462,27 @@ func (s *hostServer) status() map[string]any {
 		"profileId":   s.active.id,
 		"profileRev":  s.active.revision,
 	}
-	if s.core.Running() {
-		// The host deliberately does not invent a proxy port: the document decides
-		// its inbound address and the shell has no parser for it yet. Omitting the
-		// field is truthful; a fixed 7890 was not.
-		status["proxyPort"] = nil
+	if s.core.Running() && s.proxyPort > 0 {
+		status["proxyPort"] = s.proxyPort
 	}
 	return status
+}
+
+func parseListenPort(content string) int {
+	var document struct {
+		Inbounds []struct {
+			ListenPort int `json:"listen_port"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal([]byte(content), &document); err != nil {
+		return 0
+	}
+	for _, inbound := range document.Inbounds {
+		if inbound.ListenPort > 0 {
+			return inbound.ListenPort
+		}
+	}
+	return 0
 }
 
 // Serve reads one JSON request per line and writes one JSON response per line.

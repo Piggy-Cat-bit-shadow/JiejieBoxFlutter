@@ -65,6 +65,7 @@ class _CoreStatusStrip extends StatelessWidget {
     CoreServiceState.unavailable => 'Core unavailable',
     CoreServiceState.stopped => 'Core stopped',
     CoreServiceState.starting => 'Core starting',
+    CoreServiceState.awaitingPermission => 'VPN permission needed',
     CoreServiceState.running => 'Core running',
     CoreServiceState.stopping => 'Core stopping',
     CoreServiceState.failed => 'Core failed',
@@ -77,6 +78,19 @@ class _CoreStatusStrip extends StatelessWidget {
       animation: connection,
       builder: (context, _) {
         final colorScheme = context.colorScheme;
+        final busy =
+            connection.state == CoreServiceState.starting ||
+            connection.state == CoreServiceState.stopping;
+        final canToggle = connection.isAvailable && !busy;
+        final label = busy
+            ? (connection.state == CoreServiceState.starting
+                  ? 'Starting…'
+                  : 'Stopping…')
+            : connection.state == CoreServiceState.running
+            ? 'Stop'
+            : connection.state == CoreServiceState.awaitingPermission
+            ? 'Grant VPN'
+            : 'Start';
         return Padding(
           padding: EdgeInsets.fromLTRB(16, context.contentTopPadding, 16, 0),
           child: Card(
@@ -88,13 +102,12 @@ class _CoreStatusStrip extends StatelessWidget {
               trailing: connection.isAvailable
                   ? TonalButton(
                       size: TonalButtonSize.section,
-                      label: connection.state == CoreServiceState.running
-                          ? 'Stop'
-                          : 'Start',
-                      onPressed: () =>
-                          connection.state == CoreServiceState.running
-                          ? AppStateScope.read(context).stopService()
-                          : AppStateScope.read(context).startService(),
+                      label: label,
+                      onPressed: canToggle
+                          ? () => connection.state == CoreServiceState.running
+                                ? AppStateScope.read(context).stopService()
+                                : AppStateScope.read(context).startService()
+                          : null,
                     )
                   : null,
               subtitle: connection.reason == null

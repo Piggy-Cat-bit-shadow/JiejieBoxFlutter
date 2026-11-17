@@ -78,7 +78,7 @@ Future<void> _renameProfile(
     builder: (_) => _RenameForm(profile: profile),
   );
   if (name != null) {
-    state.renameProfile(profile.id, name);
+    await state.renameProfile(profile.id, name);
   }
 }
 

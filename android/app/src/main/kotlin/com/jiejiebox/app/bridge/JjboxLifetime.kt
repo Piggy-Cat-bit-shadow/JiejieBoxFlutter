@@ -146,6 +146,14 @@ class JjboxLifetime {
         return "failed"
     }
 
+    /** Records a profile choice without starting the service. */
+    fun selectProfile(revision: Int) {
+        if (closed) return
+        if (revision > this.revision) this.revision = revision
+        pending = null
+        if (!runtimeRunning) state = State.IDLE
+    }
+
     fun statusJson(): JSONObject = JSONObject()
         .put("state", state.name.lowercase())
         .put("revision", revision)

@@ -56,7 +56,10 @@ class ImportPreview {
       format == ImportFormat.sip008;
 
   /// Whether the import can produce a profile or append nodes.
-  bool get isUsable => isCompleteConfig || nodeCount > 0;
+  bool get isUsable =>
+      isCompleteConfig ||
+      format == ImportFormat.subscriptionUrl ||
+      nodeCount > 0;
 
   String get formatLabel => switch (format) {
     ImportFormat.empty => 'Empty',

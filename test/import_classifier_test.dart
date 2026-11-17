@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jiejiebox_flutter/features/import/import_classifier.dart';
+import 'package:jiejiebox_flutter/state/app_state.dart';
+import 'package:jjbox_bridge/jjbox_bridge.dart';
 
 void main() {
   group('classifyImport', () {
@@ -100,7 +102,7 @@ rules:
     test('single http url is a subscription, not a share link', () {
       final preview = classifyImport('https://example.com/sub?token=abc');
       expect(preview.format, ImportFormat.subscriptionUrl);
-      expect(preview.isUsable, isFalse);
+      expect(preview.isUsable, isTrue);
     });
 
     test('plain text is unsupported', () {
@@ -110,6 +112,42 @@ rules:
     test('malformed yaml does not crash', () {
       final preview = classifyImport('proxies:\n  - [unclosed');
       expect(preview.isUsable, isFalse);
+    });
+  });
+
+  group('composeImportedConfig', () {
+    test('assembles parsed nodes with an inbound and route', () {
+      final preview = PreviewResult(
+        ok: true,
+        format: 'links',
+        items: <PreviewItem>[
+          PreviewItem(
+            tag: 'node-a',
+            type: 'shadowsocks',
+            endpoint: false,
+            content: jsonEncode(<String, Object?>{
+              'type': 'shadowsocks',
+              'tag': 'node-a',
+              'server': '127.0.0.1',
+              'server_port': 8388,
+              'method': 'aes-128-gcm',
+              'password': 'pass',
+            }),
+          ),
+        ],
+      );
+      final config =
+          jsonDecode(composeImportedConfig(preview, listenPort: 0)!)
+              as Map<String, Object?>;
+      final outbounds = config['outbounds'] as List<Object?>;
+      expect(outbounds.length, 2);
+      expect((config['inbounds'] as List<Object?>).length, 1);
+      expect((config['route'] as Map<String, Object?>)['final'], 'node-a');
+    });
+
+    test('returns null without node content', () {
+      const preview = PreviewResult(ok: true);
+      expect(composeImportedConfig(preview), isNull);
     });
   });
 }

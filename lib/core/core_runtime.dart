@@ -74,6 +74,23 @@ Future<CoreRuntime> createCoreRuntime({
   while (true) {
     try {
       await host.capabilities().timeout(const Duration(seconds: 1));
+      // Mobile hosts need their core working directory before the first
+      // config/service call. Windows ignores this no-op; Android uses it to
+      // initialise libbox. Errors here must not turn a reachable host into an
+      // unavailable one, so the probe result still decides availability.
+      try {
+        await host.setup(
+          jb.SetupRequest(
+            basePath: _defaultDataPath(),
+            workingPath: '${_defaultDataPath()}/work',
+            tempPath: '${_defaultDataPath()}/temp',
+            appVersion: '0.1.0',
+            appMarketingVersion: '0.1.0',
+          ),
+        );
+      } on Object {
+        // Platform defaults (Android's context.filesDir) remain in effect.
+      }
       return CoreRuntime(HostCoreBridge(host), host, supervisor);
     } on Object catch (error) {
       lastError = error;
@@ -110,6 +127,16 @@ void _log(String message) {
 
 bool _shouldSpawnHost() =>
     Platform.isWindows && Platform.environment['FLUTTER_TEST'] != 'true';
+
+String _defaultDataPath() {
+  if (Platform.isWindows) {
+    final String local = Platform.environment['LOCALAPPDATA'] ?? '';
+    return local.isEmpty
+        ? '${Directory.systemTemp.path}\\JiejieBox\\host'
+        : '$local\\JiejieBox\\host';
+  }
+  return '${Directory.systemTemp.path}/jiejiebox-host';
+}
 
 String? _endpointFromEnvironment() {
   final String fromEnv = Platform.environment['JJBOX_HOST_ENDPOINT'] ?? '';

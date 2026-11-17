@@ -56,6 +56,11 @@ func runSelfTest(server *hostServer) error {
 		if err := expect(!bad.OK && bad.Error.Code == "core_rejected_config", "linked core must reject an invalid config"); err != nil {
 			return err
 		}
+		tunConfig := `{"inbounds":[{"type":"tun","tag":"tun-in","address":["198.18.0.1/30"],"mtu":9000,"auto_route":true,"strict_route":false,"stack":"mixed"}],"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct","auto_detect_interface":true}}`
+		tunCheck := server.Handle(request{ID: "4b", Method: "config.check", Args: map[string]any{"content": encodeBase64([]byte(tunConfig))}})
+		if err := expect(tunCheck.OK, "linked core must accept a mobile TUN config for check"); err != nil {
+			return err
+		}
 	} else {
 		check := server.Handle(request{ID: "3", Method: "config.check", Args: map[string]any{"content": encodeBase64([]byte(config))}})
 		if err := expect(!check.OK && check.Error.Code == "unsupported_platform", "unlinked core must answer unsupported_platform"); err != nil {

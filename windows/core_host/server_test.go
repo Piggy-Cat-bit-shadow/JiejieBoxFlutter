@@ -226,6 +226,35 @@ func TestProfileApplyStartsAndSwitches(t *testing.T) {
 	}
 }
 
+func TestProfileApplyWhileStoppedDoesNotStartCore(t *testing.T) {
+	server, core := newFakeServer(t)
+	id, revision := writeProfile(t, server, validProxy)
+	apply := server.Handle(request{ID: "1", Method: "profile.apply", Args: map[string]any{
+		"id": id, "revision": revision, "requestId": "req-select", "mode": "proxy",
+	}})
+	if !apply.OK {
+		t.Fatalf("select while stopped: %+v", apply.Error)
+	}
+	if len(core.started) != 0 || core.Running() {
+		t.Fatalf("selecting a profile started the core: %v", core.started)
+	}
+	if server.active.id != id {
+		t.Fatalf("selected profile not recorded: %+v", server.active)
+	}
+	if server.sm.state != stateIdle {
+		t.Fatalf("state = %s, want idle", server.sm.state)
+	}
+	start := server.Handle(request{ID: "2", Method: "service.start", Args: map[string]any{
+		"revision": float64(2), "mode": "proxy",
+	}})
+	if !start.OK {
+		t.Fatalf("start with selected profile: %+v", start.Error)
+	}
+	if len(core.started) != 1 || core.started[0] != validProxy {
+		t.Fatalf("start did not use the selected document: %v", core.started)
+	}
+}
+
 func TestProfileApplyInvalidConfigDoesNotSwitch(t *testing.T) {
 	server, core := newFakeServer(t)
 	goodID, goodRevision := writeProfile(t, server, validProxy)

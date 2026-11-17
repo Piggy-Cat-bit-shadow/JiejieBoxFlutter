@@ -203,6 +203,22 @@ func (m *stateMachine) failPending(message string) string {
 	return "failed"
 }
 
+// selectProfile records a new profile intent without starting the core. It is
+// used when the user changes the selected profile while the service is stopped:
+// the choice must persist, but it must not silently open a proxy.
+func (m *stateMachine) selectProfile(revision int64) {
+	if m.closed {
+		return
+	}
+	if revision > m.revision {
+		m.revision = revision
+	}
+	m.pending = nil
+	if !m.running {
+		m.state = stateIdle
+	}
+}
+
 func (m *stateMachine) derive() string {
 	if m.closed {
 		return stateClosed

@@ -208,17 +208,20 @@ class PreviewItem {
     required this.tag,
     required this.type,
     required this.endpoint,
+    this.content = '',
   });
 
   factory PreviewItem.fromJson(Map<String, Object?> json) => PreviewItem(
     tag: json['tag'] as String? ?? '',
     type: json['type'] as String? ?? '',
     endpoint: json['endpoint'] as bool? ?? false,
+    content: json['content'] as String? ?? '',
   );
 
   final String tag;
   final String type;
   final bool endpoint;
+  final String content;
 }
 
 class PreviewSkip {

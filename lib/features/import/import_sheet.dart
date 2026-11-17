@@ -11,7 +11,7 @@ import '../form/form_row.dart';
 import 'default_template.dart';
 import 'import_classifier.dart';
 
-enum ImportSource { link, clipboard, template }
+enum ImportSource { link, clipboard, template, file }
 
 class ImportDraft {
   const ImportDraft({
@@ -84,8 +84,8 @@ class _ImportFormState extends State<_ImportForm> {
     ImportSource.link => context.appLocalizations.importFromLink,
     ImportSource.clipboard => context.appLocalizations.clipboardImport,
     ImportSource.template => context.appLocalizations.defaultText,
+    ImportSource.file => context.appLocalizations.file,
   };
-
   ImportPreview get _preview => classifyImport(_textController.text);
 
   String _fallbackLabel(ImportPreview preview) {
@@ -112,9 +112,6 @@ class _ImportFormState extends State<_ImportForm> {
   String? _error(ImportPreview preview) {
     if (!_attempted || preview.isUsable) {
       return null;
-    }
-    if (preview.format == ImportFormat.subscriptionUrl) {
-      return 'Remote subscription needs the network/parser bridge (not connected)';
     }
     return preview.hints.isEmpty
         ? 'Nothing importable found'

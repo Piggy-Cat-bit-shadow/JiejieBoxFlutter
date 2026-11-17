@@ -33,6 +33,10 @@ object JjboxCore {
     private var commandServerClass: Class<*>? = null
     private var setupDone = false
     private var running = false
+    @Volatile
+    private var tunFd: Int = -1
+    @Volatile
+    private var startFailure: String? = null
 
     private var basePath: String = ""
     private var appVersion: String = ""
@@ -71,7 +75,10 @@ object JjboxCore {
     fun formatConfig(content: String): JSONObject {
         val libbox = requireLibbox()
         val formatted = try {
-            libbox.getMethod("formatConfig", String::class.java).invoke(null, content) as? String
+            stringBoxValue(
+                libbox.getMethod("formatConfig", String::class.java)
+                    .invoke(null, content),
+            )
         } catch (error: InvocationTargetException) {
             throw CoreException("core_rejected_config", coreMessage(error))
         } ?: throw CoreException("core_rejected_config", "formatConfig returned no document")
@@ -84,7 +91,10 @@ object JjboxCore {
     fun preview(content: String): JSONObject {
         val libbox = requireLibbox()
         val preview = try {
-            libbox.getMethod("parsePreview", String::class.java).invoke(null, content) as? String
+            stringBoxValue(
+                libbox.getMethod("parsePreview", String::class.java)
+                    .invoke(null, content),
+            )
         } catch (error: InvocationTargetException) {
             throw CoreException("invalid_argument", coreMessage(error))
         } ?: throw CoreException("invalid_argument", "parsePreview returned no document")
@@ -146,6 +156,7 @@ object JjboxCore {
             throw CoreException("core_stop_failed", coreMessage(error))
         } finally {
             running = false
+            tunFd = -1
         }
     }
 
@@ -159,6 +170,25 @@ object JjboxCore {
     }
 
     fun closeTun() = Unit
+
+    /** The VpnService has established the descriptor the core will adopt. */
+    fun attachTun(fd: Int) {
+        tunFd = fd
+    }
+
+    fun clearTun() {
+        tunFd = -1
+    }
+
+    fun reportFailure(message: String) {
+        startFailure = message
+    }
+
+    fun consumeFailure(): String? {
+        val failure = startFailure
+        startFailure = null
+        return failure
+    }
 
     private fun requireLibbox(): Class<*> {
         if (!isLoaded) {
@@ -215,16 +245,34 @@ object JjboxCore {
                 ?: target.javaClass.declaredFields.firstOrNull { it.name == candidate }
             if (field != null) {
                 field.isAccessible = true
-                field.set(target, value)
+                field.set(target, coerce(value, field.type))
                 return
             }
             val setter = target.javaClass.methods.firstOrNull {
                 it.name == candidate && it.parameterCount == 1
             }
             if (setter != null) {
-                setter.invoke(target, value)
+                setter.invoke(target, coerce(value, setter.parameterTypes[0]))
                 return
             }
+        }
+    }
+
+    private fun coerce(value: Any, type: Class<*>): Any = when {
+        type == java.lang.Long.TYPE || type == java.lang.Long::class.java ->
+            (value as Number).toLong()
+        type == java.lang.Integer.TYPE || type == java.lang.Integer::class.java ->
+            (value as Number).toInt()
+        else -> value
+    }
+
+    private fun stringBoxValue(value: Any?): String? {
+        if (value == null) return null
+        if (value is String) return value
+        return try {
+            value.javaClass.getMethod("getValue").invoke(value) as? String
+        } catch (_: Exception) {
+            value.toString()
         }
     }
 
@@ -243,7 +291,13 @@ object JjboxCore {
             "usePlatformBridge",
             "usePlatformAutoRedirect" -> false
             "getInterfaces", "localDNSTransport" -> null
-            "openTun" -> throw UnsupportedOperationException("TUN is not wired on Android")
+            "openTun" -> {
+                val fd = tunFd
+                if (fd < 0) {
+                    throw UnsupportedOperationException("TUN descriptor is not attached")
+                }
+                fd
+            }
             else -> defaultValue(method.returnType)
         }
     }
