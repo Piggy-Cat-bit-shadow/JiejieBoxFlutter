@@ -57,3 +57,16 @@ python tools\verify_baseline.py
 3. `flutter test` 在 FlClash 上会触发 `plugins/rust_api/hook/build.dart` 的 native-assets 构建，本机无 Rust，失败于 `Building native assets failed`。编辑器依赖延后。
 4. FlClash v0.9.3 的 `pubspec.lock` 在 Flutter 3.50 下会漂移；差异留在 `OUTPUT/A/P0/evidence/flclash_pubspec_lock.diff`。
 5. `flutter analyze --no-pub` 在 FlClash v0.9.3 + Flutter 3.47.6 上 **0 error / 0 info**，仅 1 个 `core/Clash.Meta` 未初始化的 asset warning。见 `OUTPUT/A/P0/evidence/flutter3476_analyze.log`。
+
+## 运行与验证（P4）
+
+```powershell
+$env:PUB_CACHE='C:\JJ\pub-cache3476'
+cd C:\JJ\JiejieBoxFlutter
+C:\JJ\tools\f3476\flutter\bin\dart.bat format --output=none --set-exit-if-changed lib test
+C:\JJ\tools\f3476\flutter\bin\flutter.bat analyze --no-pub
+C:\JJ\tools\f3476\flutter\bin\flutter.bat test --no-pub
+C:\JJ\tools\f3476\flutter\bin\flutter.bat test --update-goldens test\app_golden_test.dart
+```
+
+当前状态：analyze 0，62 tests，16 Goldens；真实 bridge 与平台编译待 C。

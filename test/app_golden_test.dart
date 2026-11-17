@@ -21,6 +21,7 @@ const _shots = <(Size, String)>[
   (Size(768, 1024), 'profiles_768x1024'),
   (Size(1024, 1366), 'profiles_1024x1366'),
   (Size(1440, 900), 'profiles_1440x900'),
+  (Size(380, 400), 'profiles_380x400'),
 ];
 
 Future<void> _loadFont(String family, String path) async {

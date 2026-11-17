@@ -48,3 +48,12 @@ Prism：`chen08209/prism_ui@63450c0ac0e8e1b2c0f3ed4ad7926dc94e083185`（位于 `
 - `features/form/**` + `widgets/input.dart`（导入表单，A2）
 - `pages/editor.dart`（依赖 `code_forge` + Rust，延后）
 - `pages/scan.dart`（需平台相机插件，C 提供）
+
+## 5. P2/P3 追加（2026-11-17）
+
+| 目标 | 来源/说明 |
+| --- | --- |
+| `lib/features/form/{form_page,form_row}.dart` | FlClash `lib/features/form/*`，`globalState.measure`→`MeasureScope`，ErrorBanner→`_FormError` |
+| `lib/features/import/*` | 新写（Dart 分类器/导入表单/单份默认模板），见 P2 NEW_COMPONENT_JUSTIFICATION |
+| `lib/core/{core_bridge,core_connection}.dart` | 按 C 契约新写；无桥时 unavailable，无假状态 |
+| `lib/views/profiles/*`、`dashboard/*`、`tools/*` | P1 改写；P2 增重命名/删除；P3 接 CoreConnection |
