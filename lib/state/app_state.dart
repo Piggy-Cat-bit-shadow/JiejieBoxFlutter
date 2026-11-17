@@ -3,6 +3,7 @@ import 'package:prism_ui/prism_ui.dart';
 
 import '../common/enums.dart';
 import '../common/layout.dart';
+import '../core/core_connection.dart';
 
 /// A profile row as the UI needs it. The real model (revision, file path,
 /// provider references) arrives with the A2 data layer; this shape is the
@@ -25,10 +26,15 @@ class ProfileEntry {
 /// Deliberately no core/proxy status lives here: nothing may render a
 /// "connected"/"updated" state until the A2 bridge provides one.
 class AppState extends ChangeNotifier {
-  AppState({Size initialViewSize = Size.zero})
-    : _viewSize = initialViewSize;
+  AppState({Size initialViewSize = Size.zero, CoreConnection? coreConnection})
+    : _viewSize = initialViewSize,
+      connection = coreConnection ?? CoreConnection();
 
   Size _viewSize;
+
+  /// Core state comes from the platform bridge (CONTRACTS); with no bridge it
+  /// is [CoreServiceState.unavailable] and never shows a fake running state.
+  final CoreConnection connection;
 
   Size get viewSize => _viewSize;
 
@@ -163,6 +169,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    connection.dispose();
     super.dispose();
   }
 }

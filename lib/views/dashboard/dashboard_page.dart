@@ -5,7 +5,9 @@ import 'package:prism_ui/prism_ui.dart';
 
 import '../../common/context.dart';
 import '../../common/layout.dart';
+import '../../core/core_connection.dart';
 import '../../state/app_state.dart';
+import '../../ui/list_item.dart';
 import '../../ui/scaffold/scaffold.dart';
 import 'dashboard_layout.dart';
 import 'dashboard_style.dart';
@@ -29,7 +31,11 @@ class DashboardPage extends StatelessWidget {
     final gap = cardSpacingOf(context, state.viewMode);
     return Scaffold(
       title: l10n.dashboard,
-      body: LayoutBuilder(
+      body: Column(
+        children: [
+          const _CoreStatusStrip(),
+          Expanded(
+            child: LayoutBuilder(
         builder: (context, constraints) {
           final room = constraints.biggest / scale;
           final density = DashboardDensity.of(room);
@@ -44,7 +50,55 @@ class DashboardPage extends StatelessWidget {
                 : _MobileDashboard(gap: gap),
           );
         },
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _CoreStatusStrip extends StatelessWidget {
+  const _CoreStatusStrip();
+
+  String _label(CoreServiceState state) => switch (state) {
+    CoreServiceState.unavailable => 'Core unavailable',
+    CoreServiceState.stopped => 'Core stopped',
+    CoreServiceState.starting => 'Core starting',
+    CoreServiceState.running => 'Core running',
+    CoreServiceState.stopping => 'Core stopping',
+    CoreServiceState.failed => 'Core failed',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final connection = AppStateScope.of(context).connection;
+    return AnimatedBuilder(
+      animation: connection,
+      builder: (context, _) {
+        final colorScheme = context.colorScheme;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, context.contentTopPadding, 16, 0),
+          child: Card(
+            child: ListItem(
+              title: Text(
+                _label(connection.state),
+                style: AppTextStyle.subheadline.of(context, emphasized: true),
+              ),
+              subtitle: connection.reason == null
+                  ? null
+                  : Text(
+                      connection.reason!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyle.footnote
+                          .of(context)
+                          .copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
