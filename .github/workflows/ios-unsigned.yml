@@ -1,0 +1,71 @@
+name: ios-unsigned
+
+# Builds an unsigned (and an ad-hoc-signed) iPhone/iPad .ipa without an Apple
+# developer certificate. The artifact is for sideloading tools that re-sign with
+# the tester's own Apple ID, or for inspection; it is not installable as-is on a
+# stock, non-jailbroken device.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: iOS unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.6'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS app without signing
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned and ad-hoc IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="build/ios/iphoneos/Runner.app"
+          test -d "$app"
+
+          rm -rf build/ipa-unsigned build/ipa-adhoc
+          mkdir -p build/ipa-unsigned/Payload build/ipa-adhoc/Payload
+          cp -R "$app" build/ipa-unsigned/Payload/Runner.app
+          cp -R "$app" build/ipa-adhoc/Payload/Runner.app
+
+          # The no-codesign build should already be unsigned; remove any stale
+          # signature so the sideload tool starts from a clean bundle.
+          /usr/bin/codesign --remove-signature build/ipa-unsigned/Payload/Runner.app 2>/dev/null || true
+
+          # Ad-hoc signature is useful for local tooling, not for installing on a
+          # stock device. A sideload tool replaces it with the tester's identity.
+          /usr/bin/codesign --force --deep --sign - build/ipa-adhoc/Payload/Runner.app
+
+          (cd build/ipa-unsigned && /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload ../JiejieBox-unsigned.ipa)
+          (cd build/ipa-adhoc && /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload ../JiejieBox-adhoc.ipa)
+
+          cd build
+          shasum -a 256 JiejieBox-unsigned.ipa JiejieBox-adhoc.ipa | tee SHA256SUMS-ios.txt
+          ls -lh JiejieBox-unsigned.ipa JiejieBox-adhoc.ipa
+
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: JiejieBox-ios-unsigned
+          path: |
+            build/JiejieBox-unsigned.ipa
+            build/JiejieBox-adhoc.ipa
+            build/SHA256SUMS-ios.txt
+          if-no-files-found: error
+          retention-days: 14
