@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
   prism_ui:
     path: third_party/prism_ui
+  jjbox_bridge:
+    path: packages/jjbox_bridge
   intl: any
   collection: ^1.19.1
   yaml: ^3.1.4

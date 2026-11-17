@@ -88,6 +88,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.20.3"
+  jjbox_bridge:
+    dependency: "direct main"
+    description:
+      path: "packages/jjbox_bridge"
+      relative: true
+    source: path
+    version: "0.1.0"
   json_annotation:
     dependency: transitive
     description:

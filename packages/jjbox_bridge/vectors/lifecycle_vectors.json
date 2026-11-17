@@ -1,0 +1,218 @@
+{
+  "schema": "c-lifecycle-vectors/1",
+  "description": "Language-neutral acceptance vectors for the host service state machine. The P1 Dart bridge and every native host must produce the same observable results; test_lifecycle_model.py is the reference implementation of these vectors.",
+  "vectors": [
+    {
+      "id": "L01-start-becomes-running-only-on-evidence",
+      "why": "An accepted start ack must not read as running; only runtime evidence may.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "runtime", "value": "running" }
+      ],
+      "expected": {
+        "state": "running",
+        "results": ["start@1:applied"],
+        "events": ["service.state"]
+      }
+    },
+    {
+      "id": "L02-double-start-coalesces",
+      "why": "Two taps while starting must not start two services.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "start", "revision": 2 },
+        { "op": "runtime", "value": "running" }
+      ],
+      "expected": {
+        "state": "running",
+        "results": ["start@1:coalesced", "start@2:applied"]
+      }
+    },
+    {
+      "id": "L03-stop-during-start-supersedes",
+      "why": "A stop issued while starting wins; the start must not resurrect.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "stop", "revision": 2 },
+        { "op": "runtime", "value": "stopped" }
+      ],
+      "expected": {
+        "state": "idle",
+        "results": ["start@1:superseded", "stop@2:applied"]
+      }
+    },
+    {
+      "id": "L04-start-during-stop-waits-for-teardown",
+      "why": "A start arriving while stopping must wait for the teardown, then run; the runtime is still 'running' when it arrives.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "runtime", "value": "running" },
+        { "op": "stop", "revision": 2 },
+        { "op": "start", "revision": 3 },
+        { "op": "runtime", "value": "stopped" },
+        { "op": "runtime", "value": "running" }
+      ],
+      "expected": {
+        "state": "running",
+        "results": ["start@1:applied", "stop@2:superseded", "start@3:applied"]
+      }
+    },
+    {
+      "id": "L05-stop-when-idle-is-applied",
+      "why": "Stop is idempotent and must settle idle without an error.",
+      "permission": "granted",
+      "steps": [
+        { "op": "stop", "revision": 1 },
+        { "op": "runtime", "value": "stopped" }
+      ],
+      "expected": {
+        "state": "idle",
+        "results": ["stop@1:applied"]
+      }
+    },
+    {
+      "id": "L06-permission-denied-fails-the-start",
+      "why": "Android VpnService.prepare refusal / macOS helper refusal must surface as failed, not as a silent idle.",
+      "permission": "unrequested",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "permission", "value": "denied" }
+      ],
+      "expected": {
+        "state": "failed",
+        "results": ["start@1:applied"],
+        "events": ["service.failed", "permission.changed"],
+        "errors": ["permission_denied"]
+      }
+    },
+    {
+      "id": "L07-stale-runtime-report-is-dropped",
+      "why": "A runtime event stamped before the newest command describes a world that no longer exists.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "runtime", "value": "running" },
+        { "op": "stop", "revision": 2 },
+        { "op": "runtime", "value": "running", "revision": 1 },
+        { "op": "runtime", "value": "stopped" }
+      ],
+      "expected": {
+        "state": "idle",
+        "results": ["start@1:applied", "stop@2:applied"],
+        "errors": ["stale_runtime_report"]
+      }
+    },
+    {
+      "id": "L08-close-is-terminal",
+      "why": "After host.shutdown every later call must answer closed.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "runtime", "value": "running" },
+        { "op": "close", "revision": 2 },
+        { "op": "runtime", "value": "stopped" },
+        { "op": "start", "revision": 3 }
+      ],
+      "expected": {
+        "state": "closed",
+        "results": ["start@1:applied", "close@2:applied"],
+        "errors": ["closed"]
+      }
+    },
+    {
+      "id": "L09-unexpected-teardown-is-a-failure",
+      "why": "A tunnel that dies without a stop intent (revoke, OS kill, crash) is failed, not idle.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "runtime", "value": "running" },
+        { "op": "runtime", "value": "stopped" }
+      ],
+      "expected": {
+        "state": "failed",
+        "results": ["start@1:applied"],
+        "events": ["service.failed"],
+        "errors": ["service.lost"]
+      }
+    },
+    {
+      "id": "L10-double-stop-coalesces",
+      "why": "Repeated stop (tray + notification + UI) must not fight itself.",
+      "permission": "granted",
+      "steps": [
+        { "op": "stop", "revision": 1 },
+        { "op": "stop", "revision": 2 },
+        { "op": "runtime", "value": "stopped" }
+      ],
+      "expected": {
+        "state": "idle",
+        "results": ["stop@1:coalesced", "stop@2:applied"]
+      }
+    },
+    {
+      "id": "L11-restart-crosses-teardown-before-start",
+      "why": "Restart must not report running before the old runtime is gone.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "runtime", "value": "running" },
+        { "op": "restart", "revision": 2 },
+        { "op": "runtime", "value": "stopped" },
+        { "op": "runtime", "value": "running" }
+      ],
+      "expected": {
+        "state": "running",
+        "results": ["start@1:applied", "restart@2:applied"]
+      }
+    },
+    {
+      "id": "L12-retry-after-permission-granted",
+      "why": "After the user grants the permission, the next start must succeed.",
+      "permission": "unrequested",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "permission", "value": "denied" },
+        { "op": "start", "revision": 2 },
+        { "op": "permission", "value": "granted" },
+        { "op": "runtime", "value": "running" }
+      ],
+      "expected": {
+        "state": "running",
+        "results": ["start@1:applied", "start@2:applied"]
+      }
+    },
+    {
+      "id": "L13-stale-revision-is-rejected",
+      "why": "A command older than the newest one must not move the machine.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 2 },
+        { "op": "start", "revision": 1 }
+      ],
+      "expected": {
+        "state": "starting",
+        "results": [],
+        "errors": ["stale_revision"]
+      }
+    },
+    {
+      "id": "L14-core-rejection-fails-without-running",
+      "why": "libbox refusing the config must end failed, never running, and keep the result honest.",
+      "permission": "granted",
+      "steps": [
+        { "op": "start", "revision": 1 },
+        { "op": "fail", "message": "core_rejected_config" }
+      ],
+      "expected": {
+        "state": "failed",
+        "results": ["start@1:applied"],
+        "events": ["service.failed"],
+        "errors": ["core_rejected_config"]
+      }
+    }
+  ]
+}
