@@ -104,6 +104,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Replaces the profile list; A2's store and the empty-state test both use it.
+  void replaceProfiles(List<ProfileEntry> next) {
+    profiles
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+  }
+
   void noteAddIntent(String intent) {
     lastAddIntent = intent;
     notifyListeners();

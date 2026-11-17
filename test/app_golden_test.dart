@@ -7,6 +7,7 @@ import 'package:jiejiebox_flutter/app.dart';
 import 'package:jiejiebox_flutter/common/enums.dart';
 import 'package:jiejiebox_flutter/shell/home_shell.dart';
 import 'package:jiejiebox_flutter/state/app_state.dart';
+import 'package:prism_ui/prism_ui.dart';
 
 const _shots = <(Size, String)>[
   (Size(375, 667), 'profiles_375x667'),
@@ -25,12 +26,19 @@ Future<void> _loadFont(String family, String path) async {
   await loader.load();
 }
 
-Future<AppState> _pump(WidgetTester tester, Size size) async {
+Future<AppState> _pump(
+  WidgetTester tester,
+  Size size, {
+  double textScale = 1.0,
+  ThemeMode themeMode = ThemeMode.system,
+}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final state = AppState(initialViewSize: size);
+  final state = AppState(initialViewSize: size)
+    ..textScale = textScale
+    ..themeMode = themeMode;
   await tester.pumpWidget(
     JiejieBoxApp(state: state, locale: const Locale('en', 'US')),
   );
@@ -54,6 +62,22 @@ void main() {
       );
     });
   }
+
+  testWidgets('golden profiles_1280x880_dark', (tester) async {
+    await _pump(tester, const Size(1280, 880), themeMode: ThemeMode.dark);
+    await expectLater(
+      find.byType(HomeShell),
+      matchesGoldenFile('goldens/profiles_1280x880_dark.png'),
+    );
+  });
+
+  testWidgets('golden profiles_1280x880_ts14', (tester) async {
+    await _pump(tester, const Size(1280, 880), textScale: 1.4);
+    await expectLater(
+      find.byType(HomeShell),
+      matchesGoldenFile('goldens/profiles_1280x880_ts14.png'),
+    );
+  });
 
   for (final (size, name) in <(Size, String)>[
     (Size(1280, 880), 'dashboard_1280x880'),
