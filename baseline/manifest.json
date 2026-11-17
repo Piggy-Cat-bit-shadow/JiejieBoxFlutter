@@ -2,14 +2,17 @@
   "schema": "jiejiebox-flutter-baseline/1",
   "phase": "P0",
   "owner": "A (UI)",
-  "generated_at_utc": "2026-11-17T10:02:45+00:00",
+  "generated_at_utc": "2026-11-17T10:21:53+00:00",
   "toolchain": {
-    "flutter": "3.50.0 (stable, framework ab2912035e, 2026-11-09)",
-    "dart": "3.14.0",
-    "flutter_sdk_path": "C:\\JJ\\tools\\flutter",
-    "pub_cache": "C:\\JJ\\pub-cache",
+    "flutter_pinned": "3.47.6 (matches FlClash CI: .github/workflows/build.yaml:19)",
+    "flutter_pinned_path": "C:\\JJ\\tools\\f3476\\flutter",
+    "dart_pinned": "3.13.5",
+    "flutter_also_verified": "3.50.0 (framework ab2912035e)",
+    "dart_also_verified": "3.14.0",
+    "pub_cache": "C:\\JJ\\pub-cache3476",
     "go": "not installed on this machine (JiejieBox work is read-only here)",
-    "rust": "not installed (rust_api native-assets hook cannot build)"
+    "rust": "not installed (rust_api native-assets hook cannot build)",
+    "reason": "3.47.6 keeps FlClash pubspec.lock unchanged; 3.50.0 upgrades test/test_api/test_core"
   },
   "flclash_pubspec_constraints": {
     "environment_sdk": ">=3.10.0 <4.0.0",

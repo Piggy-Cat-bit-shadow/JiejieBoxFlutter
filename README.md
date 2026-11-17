@@ -52,7 +52,8 @@ python tools\verify_baseline.py
 
 ## P0 环境结论（影响后续阶段）
 
-1. `flutter pub get` 在本机（未开 Developer Mode）会在 plugin symlink 处失败：`Building with plugins requires symlink support`。CI/开发机需开启 Windows 开发者模式，或改用不依赖插件的测试路径。
-2. `flutter test` 会触发 `plugins/rust_api/hook/build.dart` 的 native-assets 构建，本机无 Rust，失败于 `Building native assets failed`。P1 需安装 Rust 或裁剪编辑器依赖。
-3. FlClash v0.9.3 的 `pubspec.lock` 在 Flutter 3.50 下会把 `test/test_api/test_core` 升 3 个版本；本轮已还原锁文件，差异留在 `OUTPUT/A/P0/evidence/flclash_pubspec_lock.diff`。
-4. `flutter analyze --no-pub` 在 FlClash v0.9.3 上 **0 error**（1 个因 `core/Clash.Meta` 未初始化导致的 asset warning，5 个 info）。见 `OUTPUT/A/P0/evidence/flutter_analyze.log`。
+1. **Flutter 用 3.47.6**（上游 CI pin，`.github/workflows/build.yaml:19`）：3.47.6 下 `pub get` 不改 `pubspec.lock`；3.50.0 会把 `test/test_api/test_core` 升 3 个版本。本机 SDK 在 `C:\JJ\tools\f3476\flutter`。
+2. `flutter pub get` 在本机（未开 Developer Mode）会在 plugin symlink 处失败：`Building with plugins requires symlink support`。新工程第一阶段不要引入带平台代码的 plugin，即可绕开（已用 harness 验证 15/15 通过）。
+3. `flutter test` 在 FlClash 上会触发 `plugins/rust_api/hook/build.dart` 的 native-assets 构建，本机无 Rust，失败于 `Building native assets failed`。编辑器依赖延后。
+4. FlClash v0.9.3 的 `pubspec.lock` 在 Flutter 3.50 下会漂移；差异留在 `OUTPUT/A/P0/evidence/flclash_pubspec_lock.diff`。
+5. `flutter analyze --no-pub` 在 FlClash v0.9.3 + Flutter 3.47.6 上 **0 error / 0 info**，仅 1 个 `core/Clash.Meta` 未初始化的 asset warning。见 `OUTPUT/A/P0/evidence/flutter3476_analyze.log`。
