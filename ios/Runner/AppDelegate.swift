@@ -12,5 +12,8 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // App-local bridge plugin: not a pub package, so it registers itself.
+    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "JjboxPlugin")
+    JjboxHostPlugin.register(with: registrar)
   }
 }

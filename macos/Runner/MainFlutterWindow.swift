@@ -9,6 +9,8 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    JjboxMacHostPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "JjboxMacHostPlugin"))
 
     super.awakeFromNib()
   }

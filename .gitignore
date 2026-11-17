@@ -30,4 +30,6 @@ Thumbs.db
 # Local overrides
 *.local
 
-test/failures/
+# C host build outputs
+windows/core_host/*.exe
+windows/core_host/*.exe~

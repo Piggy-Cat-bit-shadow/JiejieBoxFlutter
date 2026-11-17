@@ -12,15 +12,28 @@ import 'package:jjbox_bridge/jjbox_bridge.dart';
 /// Writes a trace (request order + timestamps) to `build/e2e/p3_e2e_trace.json`
 /// so the P3 reports can cite the actual call sequence.
 void main() {
-  final String exe = File(
-    '../../windows/core_host/core_host.exe',
-  ).absolute.path;
-  final bool ready = Platform.isWindows && File(exe).existsSync();
+  String findHost() {
+    for (final String name in <String>[
+      'core_host_libbox.exe',
+      'core_host.exe',
+    ]) {
+      final File candidate = File('../../windows/core_host/$name').absolute;
+      if (candidate.existsSync()) {
+        return candidate.path;
+      }
+    }
+    return '';
+  }
+
+  final String exe = findHost();
+  final bool linked = exe.contains('core_host_libbox');
+  final bool ready = Platform.isWindows && exe.isNotEmpty;
   final List<Map<String, Object?>> trace = <Map<String, Object?>>[];
   final List<HostCallback> events = <HostCallback>[];
 
   late Directory dataDir;
   Process? process;
+  final List<Process> spawned = <Process>[];
   late SocketHostTransport transport;
   late HostBridge bridge;
 
@@ -74,6 +87,7 @@ void main() {
       const Duration(seconds: 10),
     );
     process = started;
+    spawned.add(started);
     return endpoint;
   }
 
@@ -94,11 +108,15 @@ void main() {
     try {
       await bridge.dispose();
     } catch (_) {}
-    process?.kill();
-    await process?.exitCode.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => -1,
-    );
+    for (final Process started in spawned) {
+      started.kill();
+    }
+    for (final Process started in spawned) {
+      await started.exitCode.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => -1,
+      );
+    }
     if (dataDir.existsSync()) {
       dataDir.deleteSync(recursive: true);
     }
@@ -130,6 +148,55 @@ void main() {
     record('request', 'host.capabilities', ok: true);
     expect(capabilities.tun, isFalse);
     expect(capabilities.qrImageDecode, isFalse);
+    expect(capabilities.core, linked);
+
+    final Uint8List validConfig = Uint8List.fromList(
+      utf8.encode(
+        '{"log":{"level":"info"},"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"}}',
+      ),
+    );
+    if (linked) {
+      final ConfigCheckResult valid = await bridge.checkConfig(validConfig);
+      expect(valid.ok, isTrue);
+      record('request', 'config.check(valid)', ok: true);
+      await expectLater(
+        bridge.checkConfig(
+          Uint8List.fromList(
+            utf8.encode('{"outbounds":[{"type":"definitely-not-a-protocol"}]}'),
+          ),
+        ),
+        throwsA(
+          isA<HostError>().having(
+            (HostError error) => error.code,
+            'code',
+            HostErrorCode.coreRejectedConfig,
+          ),
+        ),
+      );
+      record(
+        'request',
+        'config.check(invalid)',
+        ok: true,
+        detail: 'core_rejected_config',
+      );
+    } else {
+      await expectLater(
+        bridge.checkConfig(validConfig),
+        throwsA(
+          isA<HostError>().having(
+            (HostError error) => error.code,
+            'code',
+            HostErrorCode.unsupportedPlatform,
+          ),
+        ),
+      );
+      record(
+        'request',
+        'config.check(unlinked)',
+        ok: true,
+        detail: 'unsupported_platform',
+      );
+    }
     expect(capabilities.serviceModes, <String>['proxy']);
 
     final CoreCapabilities core = await bridge.coreCapabilities();

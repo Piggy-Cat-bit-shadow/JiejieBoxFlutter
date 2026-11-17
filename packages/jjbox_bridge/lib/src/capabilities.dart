@@ -6,6 +6,7 @@ library;
 
 class HostCapabilities {
   const HostCapabilities({
+    this.core = false,
     this.tun = false,
     this.systemProxy = false,
     this.perAppProxy = false,
@@ -26,6 +27,7 @@ class HostCapabilities {
     final List<Object?> modes =
         (json['serviceModes'] as List<Object?>?) ?? const <Object?>['vpn'];
     return HostCapabilities(
+      core: flag('core'),
       tun: flag('tun'),
       systemProxy: flag('systemProxy'),
       perAppProxy: flag('perAppProxy'),
@@ -42,6 +44,9 @@ class HostCapabilities {
     );
   }
 
+  /// Whether this host build links a kernel at all. False means config.* answers
+  /// `unsupported_platform`, not `core_unavailable`.
+  final bool core;
   final bool tun;
   final bool systemProxy;
   final bool perAppProxy;
@@ -61,6 +66,7 @@ class HostCapabilities {
   bool get supportsDesktopShell => tray || autostart;
 
   Map<String, Object?> toJson() => <String, Object?>{
+    'core': core,
     'tun': tun,
     'systemProxy': systemProxy,
     'perAppProxy': perAppProxy,

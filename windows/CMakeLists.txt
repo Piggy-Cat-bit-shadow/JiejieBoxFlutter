@@ -49,6 +49,9 @@ endfunction()
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
+# Bridge transport plugin; see plugins/CMakeLists.txt.
+add_subdirectory("plugins")
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
