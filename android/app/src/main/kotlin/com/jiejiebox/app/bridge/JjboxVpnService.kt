@@ -18,6 +18,7 @@ import android.os.ParcelFileDescriptor
  * 198.18.0.1/30 and 198.18.0.2 for DNS (the fake-ip pool starts above this /30).
  */
 class JjboxVpnService : VpnService() {
+    @Volatile
     private var established = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -89,17 +90,20 @@ class JjboxVpnService : VpnService() {
         }
         JjboxCore.vpnPermissionGranted = true
         JjboxCore.attachTun(fd)
-        try {
-            JjboxCore.startService(config)
-            established = true
-        } catch (error: Exception) {
-            JjboxCore.clearTun()
-            JjboxCore.vpnPermissionGranted = false
-            JjboxCore.reportFailure(error.message ?: "VPN core start failed")
-            runCatching { ParcelFileDescriptor.adoptFd(fd).close() }
-            stopTun()
-            stopSelf()
-        }
+        // Core startup can parse a large config and install the TUN; keep it off
+        // the service main thread so Android does not ANR the first start.
+        Thread {
+            try {
+                JjboxCore.startService(config)
+                established = true
+            } catch (error: Exception) {
+                JjboxCore.clearTun()
+                JjboxCore.vpnPermissionGranted = false
+                JjboxCore.reportFailure(error.message ?: "VPN core start failed")
+                runCatching { ParcelFileDescriptor.adoptFd(fd).close() }
+                stopSelf()
+            }
+        }.start()
     }
 
     private fun stopTun() {
