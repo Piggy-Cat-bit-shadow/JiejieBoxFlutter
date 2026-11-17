@@ -31,14 +31,14 @@ void main() {
   }
 
   test('mutations are serialized and every revision is observable', () async {
-    final List<Future<ProfileWriteResult>> pending = <Future<ProfileWriteResult>>[
-      write('{"a":1}'),
-      write('{"a":2}'),
-      write('{"a":3}'),
-    ];
+    final List<Future<ProfileWriteResult>> pending =
+        <Future<ProfileWriteResult>>[
+          write('{"a":1}'),
+          write('{"a":2}'),
+          write('{"a":3}'),
+        ];
     expect(repository.queued, 3);
-    final List<ProfileWriteResult> results =
-        await Future.wait(pending);
+    final List<ProfileWriteResult> results = await Future.wait(pending);
     expect(repository.queued, 0);
     expect(results.map((ProfileWriteResult r) => r.id).toSet().length, 3);
 
@@ -60,11 +60,13 @@ void main() {
         content: _bytes('{"v":2}'),
         expectedRevision: 'stale',
       ),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.revisionMismatch,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.revisionMismatch,
+        ),
+      ),
     );
     final ProfileContent after = await repository.read(first.id);
     expect(utf8.decode(after.content), '{"v":1}');
@@ -79,8 +81,10 @@ void main() {
       content: _bytes('{"v":2}'),
       expectedRevision: first.revision,
     );
-    final ProfileWriteResult restored =
-        await repository.restore(first.id, first.revision);
+    final ProfileWriteResult restored = await repository.restore(
+      first.id,
+      first.revision,
+    );
     expect(restored.revision, first.revision);
     final ProfileContent after = await repository.read(first.id);
     expect(utf8.decode(after.content), '{"v":1}');
@@ -91,11 +95,13 @@ void main() {
     final ProfileWriteResult first = await write('{"v":1}');
     await expectLater(
       repository.restore(first.id, 'deadbeef'),
-      throwsA(isA<HostError>().having(
-        (HostError error) => error.code,
-        'code',
-        HostErrorCode.revisionMismatch,
-      )),
+      throwsA(
+        isA<HostError>().having(
+          (HostError error) => error.code,
+          'code',
+          HostErrorCode.revisionMismatch,
+        ),
+      ),
     );
   });
 

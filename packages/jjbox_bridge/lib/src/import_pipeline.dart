@@ -85,19 +85,22 @@ class ImportException implements Exception {
     HostErrorCode code,
     String message, {
     Map<String, Object?> details = const <String, Object?>{},
-  }) : this(HostError(
-          code: code,
-          message: message,
-          retryable: code.retryable,
-          details: details,
-        ));
+  }) : this(
+         HostError(
+           code: code,
+           message: message,
+           retryable: code.retryable,
+           details: details,
+         ),
+       );
 
   final HostError error;
 
   HostErrorCode get code => error.code;
 
   @override
-  String toString() => 'ImportException(${error.code.wireName}: ${error.message})';
+  String toString() =>
+      'ImportException(${error.code.wireName}: ${error.message})';
 }
 
 const Set<String> _shareSchemes = <String>{
@@ -157,18 +160,22 @@ class ImportPipeline {
         .map((String line) => line.trim())
         .where((String line) => line.isNotEmpty)
         .toList(growable: false);
-    final bool yamlish = lines.any((String line) =>
-        line.startsWith('proxies:') ||
-        line.startsWith('proxy-groups:') ||
-        line.startsWith('proxy-providers:') ||
-        line.startsWith('rules:'));
+    final bool yamlish = lines.any(
+      (String line) =>
+          line.startsWith('proxies:') ||
+          line.startsWith('proxy-groups:') ||
+          line.startsWith('proxy-providers:') ||
+          line.startsWith('rules:'),
+    );
     if (yamlish) {
       return ImportKind.clashYaml;
     }
     final String first = lines.first;
     final Uri? uri = Uri.tryParse(first);
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      return lines.length == 1 ? ImportKind.subscriptionUrl : ImportKind.shareLink;
+      return lines.length == 1
+          ? ImportKind.subscriptionUrl
+          : ImportKind.shareLink;
     }
     if (uri != null && _shareSchemes.contains(uri.scheme)) {
       return ImportKind.shareLink;
@@ -187,10 +194,13 @@ class ImportPipeline {
   }
 
   Future<ImportPlan> prepare(ImportRequest request) async {
-    final Uint8List bytes = request.bytes ??
-        Uint8List.fromList(utf8.encode(request.text ?? ''));
+    final Uint8List bytes =
+        request.bytes ?? Uint8List.fromList(utf8.encode(request.text ?? ''));
     if (bytes.isEmpty) {
-      throw ImportException.code(HostErrorCode.invalidArgument, 'the input is empty');
+      throw ImportException.code(
+        HostErrorCode.invalidArgument,
+        'the input is empty',
+      );
     }
     if (bytes.length > maxBytes) {
       throw ImportException.code(
@@ -198,11 +208,13 @@ class ImportPipeline {
         'the input is larger than ${maxBytes ~/ 1024} KiB',
       );
     }
-    final String text = request.text ?? utf8.decode(bytes, allowMalformed: true);
+    final String text =
+        request.text ?? utf8.decode(bytes, allowMalformed: true);
     if (request.source == ImportSource.qr) {
       _validateQrText(text);
     }
-    if (request.source == ImportSource.clipboard && text.length > maxClipboardChars) {
+    if (request.source == ImportSource.clipboard &&
+        text.length > maxClipboardChars) {
       throw ImportException.code(
         HostErrorCode.invalidArgument,
         'the clipboard payload is too large',
@@ -326,7 +338,10 @@ class ImportPipeline {
 
   void _validateQrText(String text) {
     if (text.trim().isEmpty) {
-      throw ImportException.code(HostErrorCode.invalidArgument, 'the QR code is empty');
+      throw ImportException.code(
+        HostErrorCode.invalidArgument,
+        'the QR code is empty',
+      );
     }
     if (text.length > maxQrChars) {
       throw ImportException.code(
@@ -342,7 +357,10 @@ class ImportPipeline {
     }
     final Uri? uri = Uri.tryParse(text.trim());
     if (uri == null) {
-      throw ImportException.code(HostErrorCode.invalidArgument, 'the QR payload is not a URI');
+      throw ImportException.code(
+        HostErrorCode.invalidArgument,
+        'the QR payload is not a URI',
+      );
     }
     final String scheme = uri.scheme.toLowerCase();
     if (scheme == 'javascript' || scheme == 'data' || scheme == 'file') {

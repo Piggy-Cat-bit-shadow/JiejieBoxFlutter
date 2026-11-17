@@ -28,11 +28,7 @@ class SocketHostTransport implements HostTransport {
     return SocketHostTransport._(host, port, socket);
   }
 
-  static Future<Socket> _open(
-    String host,
-    int port,
-    Duration timeout,
-  ) async {
+  static Future<Socket> _open(String host, int port, Duration timeout) async {
     // ignore: close_sinks - closed in dispose()
     final Socket socket = await Socket.connect(host, port, timeout: timeout);
     socket.setOption(SocketOption.tcpNoDelay, true);
@@ -51,7 +47,9 @@ class SocketHostTransport implements HostTransport {
   /// Pending calls fail with `transport_disconnected` (their effect is unknown, so
   /// the caller must re-read `service.status`); the event stream survives, which is
   /// what lets a reconnect stay transparent to the UI.
-  Future<void> reconnect({Duration timeout = const Duration(seconds: 5)}) async {
+  Future<void> reconnect({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     _failPending(
       const HostError(
         code: HostErrorCode.transportDisconnected,
@@ -95,6 +93,7 @@ class SocketHostTransport implements HostTransport {
         .transform(const LineSplitter())
         .listen(_onLine, onError: _onError, onDone: _onDone);
   }
+
   final Map<String, Completer<HostResponse>> _pending =
       <String, Completer<HostResponse>>{};
   final StreamController<HostCallback> _events =
@@ -132,14 +131,17 @@ class SocketHostTransport implements HostTransport {
         ),
       );
     }
-    return completer.future.timeout(const Duration(seconds: 20), onTimeout: () {
-      _pending.remove(request.id);
-      throw const HostError(
-        code: HostErrorCode.timeout,
-        message: 'the host did not answer on the socket',
-        retryable: true,
-      );
-    });
+    return completer.future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {
+        _pending.remove(request.id);
+        throw const HostError(
+          code: HostErrorCode.timeout,
+          message: 'the host did not answer on the socket',
+          retryable: true,
+        );
+      },
+    );
   }
 
   void _onLine(String line) {

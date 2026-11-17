@@ -25,33 +25,34 @@ class FakeHost implements HostTransport {
     PermissionEvidence permission = PermissionEvidence.granted,
     CoreCapabilities? core,
     DateTime Function()? clock,
-  })  : _capabilities = <String, Object?>{
-          'tun': tun,
-          'systemProxy': systemProxy,
-          'perAppProxy': false,
-          'autostart': desktop,
-          'tray': desktop,
-          'qrCamera': !desktop,
-          'qrImageDecode': true,
-          'fileImport': true,
-          'clipboardWatch': true,
-          'notifications': true,
-          'deepLink': true,
-          'memoryPressure': !desktop,
-          'serviceModes': tun ? <String>['vpn', 'proxy'] : <String>['proxy'],
-        },
-        _needsPermission = requestPermission,
-        _core = core ??
-            const CoreCapabilities(
-              apiVersion: 4,
-              buildId: 'fake-build',
-              buildQuic: true,
-              platform: 'test',
-              version: '0.1.0',
-              goVersion: 'go1.27.4',
-              types: <String>['direct', 'vless', 'hysteria2', 'tuic'],
-            ),
-        _clock = clock ?? DateTime.now {
+  }) : _capabilities = <String, Object?>{
+         'tun': tun,
+         'systemProxy': systemProxy,
+         'perAppProxy': false,
+         'autostart': desktop,
+         'tray': desktop,
+         'qrCamera': !desktop,
+         'qrImageDecode': true,
+         'fileImport': true,
+         'clipboardWatch': true,
+         'notifications': true,
+         'deepLink': true,
+         'memoryPressure': !desktop,
+         'serviceModes': tun ? <String>['vpn', 'proxy'] : <String>['proxy'],
+       },
+       _needsPermission = requestPermission,
+       _core =
+           core ??
+           const CoreCapabilities(
+             apiVersion: 4,
+             buildId: 'fake-build',
+             buildQuic: true,
+             platform: 'test',
+             version: '0.1.0',
+             goVersion: 'go1.27.4',
+             types: <String>['direct', 'vless', 'hysteria2', 'tuic'],
+           ),
+       _clock = clock ?? DateTime.now {
     machine = HostServiceStateMachine(permission: permission);
   }
 
@@ -164,14 +165,20 @@ class FakeHost implements HostTransport {
         if (outcome == 'pending') {
           _emit('service.state', _status());
         }
-        return <String, Object?>{'accepted': outcome != 'rejected:closed', 'revision': revision};
+        return <String, Object?>{
+          'accepted': outcome != 'rejected:closed',
+          'revision': revision,
+        };
       case BridgeMethod.serviceStop:
         final int revision = (args['revision'] as num?)?.toInt() ?? 0;
         final String outcome = machine.stop(revision);
         if (outcome == 'pending') {
           _emit('service.state', _status());
         }
-        return <String, Object?>{'accepted': outcome != 'rejected:closed', 'revision': revision};
+        return <String, Object?>{
+          'accepted': outcome != 'rejected:closed',
+          'revision': revision,
+        };
       case BridgeMethod.serviceStatus:
         return _status();
       case BridgeMethod.configCheck:
@@ -194,7 +201,11 @@ class FakeHost implements HostTransport {
           'base64': false,
           'items': <Object?>[
             <String, Object?>{'tag': 'a', 'type': 'vless', 'endpoint': false},
-            <String, Object?>{'tag': 'b', 'type': 'hysteria2', 'endpoint': false},
+            <String, Object?>{
+              'tag': 'b',
+              'type': 'hysteria2',
+              'endpoint': false,
+            },
           ],
           'skipped': <Object?>[
             <String, Object?>{'line': 3, 'reason': 'unsupported scheme: ssr'},
@@ -239,8 +250,9 @@ class FakeHost implements HostTransport {
       case BridgeMethod.profileWrite:
         final String? id = args['id'] as String?;
         final String? expected = args['expectedRevision'] as String?;
-        final Uint8List content =
-            base64Decode(args['content'] as String? ?? '');
+        final Uint8List content = base64Decode(
+          args['content'] as String? ?? '',
+        );
         final String target = id ?? 'p${profiles.length + 1}';
         if (expected != null && revisions[target] != expected) {
           throw const HostError(
@@ -328,7 +340,9 @@ class FakeHost implements HostTransport {
       case BridgeMethod.filePickConfig:
         return <String, Object?>{
           'name': 'config.json',
-          'content': base64Encode(Uint8List.fromList(utf8.encode('{"log":{}}'))),
+          'content': base64Encode(
+            Uint8List.fromList(utf8.encode('{"log":{}}')),
+          ),
           'sha256': 'fake-sha',
         };
       case BridgeMethod.clipboardReadCandidate:
@@ -350,16 +364,16 @@ class FakeHost implements HostTransport {
   }
 
   Map<String, Object?> _status() => <String, Object?>{
-        'state': machine.state.name,
-        'revision': machine.revision,
-        'sinceMillis': _since++,
-        'mode': 'proxy',
-        'tunActive': machine.state == ServiceState.running,
-        'proxyPort': 7890,
-        'permission': machine.state == ServiceState.awaitingPermission
-            ? 'denied'
-            : 'granted',
-      };
+    'state': machine.state.name,
+    'revision': machine.revision,
+    'sinceMillis': _since++,
+    'mode': 'proxy',
+    'tunActive': machine.state == ServiceState.running,
+    'proxyPort': 7890,
+    'permission': machine.state == ServiceState.awaitingPermission
+        ? 'denied'
+        : 'granted',
+  };
 
   @override
   Future<void> dispose() async {

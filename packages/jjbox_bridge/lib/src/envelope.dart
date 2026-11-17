@@ -15,7 +15,8 @@ class HostRequest {
     return HostRequest(
       id: json['id'] as String? ?? '',
       method: json['method'] as String? ?? '',
-      args: (json['args'] as Map<Object?, Object?>?)?.cast<String, Object?>() ??
+      args:
+          (json['args'] as Map<Object?, Object?>?)?.cast<String, Object?>() ??
           const <String, Object?>{},
     );
   }
@@ -25,10 +26,10 @@ class HostRequest {
   final Map<String, Object?> args;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'method': method,
-        'args': args,
-      };
+    'id': id,
+    'method': method,
+    'args': args,
+  };
 }
 
 /// `{id, ok, result}` or `{id, ok:false, error}`.
@@ -52,11 +53,11 @@ class HostResponse {
   bool get ok => error == null;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'ok': ok,
-        'result': result,
-        'error': error?.toJson(),
-      };
+    'id': id,
+    'ok': ok,
+    'result': result,
+    'error': error?.toJson(),
+  };
 
   /// Returns the result map or throws the typed error.
   Map<String, Object?> requireResult() {
@@ -84,7 +85,8 @@ class HostCallback {
     return HostCallback(
       type: json['type'] as String? ?? '',
       seq: (json['seq'] as num?)?.toInt() ?? 0,
-      data: (json['data'] as Map<Object?, Object?>?)?.cast<String, Object?>() ??
+      data:
+          (json['data'] as Map<Object?, Object?>?)?.cast<String, Object?>() ??
           const <String, Object?>{},
     );
   }
@@ -94,10 +96,10 @@ class HostCallback {
   final Map<String, Object?> data;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'type': type,
-        'seq': seq,
-        'data': data,
-      };
+    'type': type,
+    'seq': seq,
+    'data': data,
+  };
 }
 
 /// Detects gaps in the callback sequence so Dart can ask for a full resync.

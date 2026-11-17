@@ -29,3 +29,5 @@ Thumbs.db
 
 # Local overrides
 *.local
+
+test/failures/

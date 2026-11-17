@@ -1,0 +1,15 @@
+# Root analyzer config for the app package.
+#
+# Lint rules are intentionally left to the vendored `packages/jjbox_bridge`
+# (its own analysis_options includes ../../lint_options.yaml, C's rules) and to
+# review: the app was imported from FlClash's source, which does not follow those
+# rules, so enforcing them here would turn hundreds of style infos into noise.
+# Errors and warnings are still surfaced.
+analyzer:
+  exclude:
+    - build/**
+    - .dart_tool/**
+    - android/**
+    - ios/**
+    - macos/**
+    - windows/**

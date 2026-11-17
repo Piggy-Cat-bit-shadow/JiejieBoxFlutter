@@ -14,9 +14,7 @@ enum ClipboardDecision {
 }
 
 class ClipboardGate {
-  ClipboardGate({
-    this.dedupeWindow = const Duration(seconds: 30),
-  });
+  ClipboardGate({this.dedupeWindow = const Duration(seconds: 30)});
 
   final Duration dedupeWindow;
 
@@ -41,7 +39,9 @@ class ClipboardGate {
     }
     final String digest = sha256 ?? text.trim();
     final DateTime? seen = _lastSeen;
-    if (_lastSha == digest && seen != null && now.difference(seen) < dedupeWindow) {
+    if (_lastSha == digest &&
+        seen != null &&
+        now.difference(seen) < dedupeWindow) {
       return ClipboardDecision.duplicate;
     }
     _lastSha = digest;

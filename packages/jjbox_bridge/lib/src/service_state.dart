@@ -91,23 +91,28 @@ class HostServiceStateMachine {
     _revision = revision;
     final bool hadPending = _pending != null;
     if (_pending?.intent == ServiceIntent.start) {
-      _results.add(IntentResult(
-        _pending!.intent,
-        _pending!.revision,
-        ServiceOutcome.coalesced,
-      ));
+      _results.add(
+        IntentResult(
+          _pending!.intent,
+          _pending!.revision,
+          ServiceOutcome.coalesced,
+        ),
+      );
       _pending = null;
     } else if (_pending != null) {
-      _results.add(IntentResult(
-        _pending!.intent,
-        _pending!.revision,
-        ServiceOutcome.superseded,
-      ));
+      _results.add(
+        IntentResult(
+          _pending!.intent,
+          _pending!.revision,
+          ServiceOutcome.superseded,
+        ),
+      );
       _pending = null;
     }
     if (_runtime == RuntimeEvidence.running && !hadPending) {
-      _results.add(IntentResult(ServiceIntent.start, revision,
-          ServiceOutcome.applied));
+      _results.add(
+        IntentResult(ServiceIntent.start, revision, ServiceOutcome.applied),
+      );
       _permission = PermissionEvidence.granted;
       _emit('service.state');
       return 'applied';
@@ -133,18 +138,22 @@ class HostServiceStateMachine {
     }
     _revision = revision;
     if (_pending?.intent == ServiceIntent.stop) {
-      _results.add(IntentResult(
-        _pending!.intent,
-        _pending!.revision,
-        ServiceOutcome.coalesced,
-      ));
+      _results.add(
+        IntentResult(
+          _pending!.intent,
+          _pending!.revision,
+          ServiceOutcome.coalesced,
+        ),
+      );
       _pending = null;
     } else if (_pending != null) {
-      _results.add(IntentResult(
-        _pending!.intent,
-        _pending!.revision,
-        ServiceOutcome.superseded,
-      ));
+      _results.add(
+        IntentResult(
+          _pending!.intent,
+          _pending!.revision,
+          ServiceOutcome.superseded,
+        ),
+      );
       _pending = null;
     }
     _pending = _Pending(ServiceIntent.stop, revision, false);
@@ -164,11 +173,13 @@ class HostServiceStateMachine {
     }
     _revision = revision;
     if (_pending != null) {
-      _results.add(IntentResult(
-        _pending!.intent,
-        _pending!.revision,
-        ServiceOutcome.superseded,
-      ));
+      _results.add(
+        IntentResult(
+          _pending!.intent,
+          _pending!.revision,
+          ServiceOutcome.superseded,
+        ),
+      );
     }
     _pending = _Pending(
       ServiceIntent.restart,
@@ -191,11 +202,13 @@ class HostServiceStateMachine {
     }
     _revision = revision;
     if (_pending != null) {
-      _results.add(IntentResult(
-        _pending!.intent,
-        _pending!.revision,
-        ServiceOutcome.superseded,
-      ));
+      _results.add(
+        IntentResult(
+          _pending!.intent,
+          _pending!.revision,
+          ServiceOutcome.superseded,
+        ),
+      );
     }
     _pending = _Pending(ServiceIntent.close, revision, false);
     _state = _derive();
@@ -218,8 +231,7 @@ class HostServiceStateMachine {
         _emit('service.state');
         return 'observed';
       }
-      if (value == RuntimeEvidence.stopped &&
-          _state == ServiceState.running) {
+      if (value == RuntimeEvidence.stopped && _state == ServiceState.running) {
         _fail('service.lost');
         return 'observed';
       }
@@ -297,12 +309,12 @@ class HostServiceStateMachine {
   }
 
   Map<String, Object?> snapshot() => <String, Object?>{
-        'state': _state.name,
-        'revision': _revision,
-        'results': _results.map((IntentResult r) => r.toString()).toList(),
-        'events': List<String>.from(_events),
-        'errors': List<String>.from(_errors),
-      };
+    'state': _state.name,
+    'revision': _revision,
+    'results': _results.map((IntentResult r) => r.toString()).toList(),
+    'events': List<String>.from(_events),
+    'errors': List<String>.from(_errors),
+  };
 
   ServiceState _derive() {
     if (_closed) {
@@ -345,11 +357,9 @@ class HostServiceStateMachine {
     _state = ServiceState.failed;
     final _Pending? pending = _pending;
     if (pending != null) {
-      _results.add(IntentResult(
-        pending.intent,
-        pending.revision,
-        ServiceOutcome.applied,
-      ));
+      _results.add(
+        IntentResult(pending.intent, pending.revision, ServiceOutcome.applied),
+      );
     }
     _pending = null;
     _errors.add(message);

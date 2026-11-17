@@ -12,7 +12,9 @@ import 'package:jjbox_bridge/jjbox_bridge.dart';
 /// Writes a trace (request order + timestamps) to `build/e2e/p3_e2e_trace.json`
 /// so the P3 reports can cite the actual call sequence.
 void main() {
-  final String exe = File('../../windows/core_host/core_host.exe').absolute.path;
+  final String exe = File(
+    '../../windows/core_host/core_host.exe',
+  ).absolute.path;
   final bool ready = Platform.isWindows && File(exe).existsSync();
   final List<Map<String, Object?>> trace = <Map<String, Object?>>[];
   final List<HostCallback> events = <HostCallback>[];
@@ -42,7 +44,10 @@ void main() {
     return port;
   }
 
-  Future<({String host, int port})> startHost(String dir, {int port = 0}) async {
+  Future<({String host, int port})> startHost(
+    String dir, {
+    int port = 0,
+  }) async {
     final Process started = await Process.start(exe, <String>[
       '--listen',
       '127.0.0.1:$port',
@@ -56,24 +61,28 @@ void main() {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((String line) {
-      if (line.startsWith('LISTEN ') && !completer.isCompleted) {
-        final String address = line.substring(7).trim();
-        final int split = address.lastIndexOf(':');
-        completer.complete((
-          host: address.substring(0, split),
-          port: int.parse(address.substring(split + 1)),
-        ));
-      }
-    });
-    final ({String host, int port}) endpoint =
-        await completer.future.timeout(const Duration(seconds: 10));
+          if (line.startsWith('LISTEN ') && !completer.isCompleted) {
+            final String address = line.substring(7).trim();
+            final int split = address.lastIndexOf(':');
+            completer.complete((
+              host: address.substring(0, split),
+              port: int.parse(address.substring(split + 1)),
+            ));
+          }
+        });
+    final ({String host, int port}) endpoint = await completer.future.timeout(
+      const Duration(seconds: 10),
+    );
     process = started;
     return endpoint;
   }
 
   Future<void> connect(({String host, int port}) endpoint) async {
     transport = await SocketHostTransport.connect(endpoint.host, endpoint.port);
-    bridge = HostBridge(transport: transport, timeout: const Duration(seconds: 3));
+    bridge = HostBridge(
+      transport: transport,
+      timeout: const Duration(seconds: 3),
+    );
     bridge.events.listen((event) => events.add(event.callback));
   }
 
@@ -86,7 +95,10 @@ void main() {
       await bridge.dispose();
     } catch (_) {}
     process?.kill();
-    await process?.exitCode.timeout(const Duration(seconds: 5), onTimeout: () => -1);
+    await process?.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => -1,
+    );
     if (dataDir.existsSync()) {
       dataDir.deleteSync(recursive: true);
     }
@@ -99,7 +111,11 @@ void main() {
         'trace': trace,
         'events': <Map<String, Object?>>[
           for (final HostCallback event in events)
-            <String, Object?>{'type': event.type, 'seq': event.seq, 'data': event.data},
+            <String, Object?>{
+              'type': event.type,
+              'seq': event.seq,
+              'data': event.data,
+            },
         ],
       }),
     );
@@ -140,8 +156,16 @@ void main() {
     );
     record('request', 'profile.write(v2)', ok: true, detail: v2.revision);
 
-    final ProfileWriteResult restored = await bridge.restoreProfile(v1.id, v1.revision);
-    record('request', 'profile.restore(v1)', ok: true, detail: restored.revision);
+    final ProfileWriteResult restored = await bridge.restoreProfile(
+      v1.id,
+      v1.revision,
+    );
+    record(
+      'request',
+      'profile.restore(v1)',
+      ok: true,
+      detail: restored.revision,
+    );
     expect(restored.revision, v1.revision);
     expect(utf8.decode((await bridge.readProfile(v1.id)).content), '{"v":1}');
 
@@ -181,8 +205,14 @@ void main() {
     await bridge.invoke('test.runtime', <String, Object?>{'running': false});
 
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(events.where((HostCallback e) => e.type == 'service.state'), isNotEmpty);
-    expect(events.where((HostCallback e) => e.type == 'permission.changed'), isNotEmpty);
+    expect(
+      events.where((HostCallback e) => e.type == 'service.state'),
+      isNotEmpty,
+    );
+    expect(
+      events.where((HostCallback e) => e.type == 'permission.changed'),
+      isNotEmpty,
+    );
     for (final HostCallback event in events) {
       record('event', event.type, detail: 'seq=${event.seq}');
     }
@@ -196,45 +226,74 @@ void main() {
       return;
     }
     final int port = await freePort();
-    final Directory dir = await Directory.systemTemp.createTemp('jjbox-p3-reconnect-');
+    final Directory dir = await Directory.systemTemp.createTemp(
+      'jjbox-p3-reconnect-',
+    );
     addTearDown(() {
       if (dir.existsSync()) {
         dir.deleteSync(recursive: true);
       }
     });
 
-    final ({String host, int port}) endpoint = await startHost(dir.path, port: port);
+    final ({String host, int port}) endpoint = await startHost(
+      dir.path,
+      port: port,
+    );
     await connect(endpoint);
     final ProfileWriteResult marker = await bridge.writeProfile(
       label: 'reconnect',
       kind: 'local',
       content: Uint8List.fromList(utf8.encode('{"marker":true}')),
     );
-    record('request', 'profile.write(reconnect marker)', ok: true, detail: marker.revision);
+    record(
+      'request',
+      'profile.write(reconnect marker)',
+      ok: true,
+      detail: marker.revision,
+    );
 
     process?.kill();
-    await process?.exitCode.timeout(const Duration(seconds: 5), onTimeout: () => -1);
+    await process?.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => -1,
+    );
     await Future<void>.delayed(const Duration(milliseconds: 200));
     // The first call after an abrupt kill may see a buffered write and then time
     // out; both answers mean "state unknown", which is what the contract says.
     try {
       await bridge.status();
-      record('client', 'status-after-kill', ok: false, detail: 'unexpected success');
+      record(
+        'client',
+        'status-after-kill',
+        ok: false,
+        detail: 'unexpected success',
+      );
     } on HostError catch (error) {
       expect(
         error.code,
         anyOf(HostErrorCode.transportDisconnected, HostErrorCode.timeout),
       );
-      record('client', 'status-after-kill', ok: true, detail: error.code.wireName);
+      record(
+        'client',
+        'status-after-kill',
+        ok: true,
+        detail: error.code.wireName,
+      );
     }
 
-    final ({String host, int port}) restarted = await startHost(dir.path, port: port);
+    final ({String host, int port}) restarted = await startHost(
+      dir.path,
+      port: port,
+    );
     expect(restarted.port, port);
     await transport.reconnect();
     record('client', 'reconnect', ok: true, detail: 'same port $port');
     final List<ProfileMeta> profiles = await bridge.listProfiles();
     expect(profiles.single.id, marker.id);
-    expect(utf8.decode((await bridge.readProfile(marker.id)).content), '{"marker":true}');
+    expect(
+      utf8.decode((await bridge.readProfile(marker.id)).content),
+      '{"marker":true}',
+    );
     await bridge.shutdown();
   }, skip: !ready);
 
@@ -243,15 +302,26 @@ void main() {
       return;
     }
     process?.kill();
-    await process?.exitCode.timeout(const Duration(seconds: 5), onTimeout: () => -1);
+    await process?.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => -1,
+    );
     await bridge.dispose();
 
     final ({String host, int port}) endpoint = await startHost(dataDir.path);
     await connect(endpoint);
     final List<ProfileMeta> profiles = await bridge.listProfiles();
-    record('request', 'profile.list(after restart)', ok: true, detail: '${profiles.length}');
+    record(
+      'request',
+      'profile.list(after restart)',
+      ok: true,
+      detail: '${profiles.length}',
+    );
     expect(profiles, hasLength(1));
-    expect(utf8.decode((await bridge.readProfile(profiles.single.id)).content), '{"v":1}');
+    expect(
+      utf8.decode((await bridge.readProfile(profiles.single.id)).content),
+      '{"v":1}',
+    );
     await bridge.shutdown();
   }, skip: !ready);
 }

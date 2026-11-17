@@ -18,8 +18,8 @@ class MethodChannelHostTransport implements HostTransport {
   MethodChannelHostTransport({
     MethodChannel commands = const MethodChannel('jjbox/host'),
     MethodChannel callbacks = const MethodChannel('jjbox/host/callback'),
-  })  : _commands = commands,
-        _callbacks = callbacks {
+  }) : _commands = commands,
+       _callbacks = callbacks {
     _callbacks.setMethodCallHandler(_onCallback);
   }
 

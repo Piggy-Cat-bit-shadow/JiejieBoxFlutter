@@ -24,13 +24,16 @@ class ImportFixture {
 
 const String kPlaceholderUuid = '11111111-2222-3333-4444-555555555555';
 
-const String kShareLink = 'vless://$kPlaceholderUuid@example.com:443?security=tls#demo';
-const String kShareLinkSecond = 'trojan://$kPlaceholderUuid@example.org:443#demo2';
+const String kShareLink =
+    'vless://$kPlaceholderUuid@example.com:443?security=tls#demo';
+const String kShareLinkSecond =
+    'trojan://$kPlaceholderUuid@example.org:443#demo2';
 const String kSubscriptionUrl = 'https://example.com/sub';
 const String kClashYaml =
     'proxies:\n  - name: a\n    type: ss\n    server: example.com\n    port: 8388\n'
     'rules:\n  - MATCH,DIRECT\n';
-const String kSip008 = '{"version":1,"servers":[{"server":"example.com","server_port":443}]}';
+const String kSip008 =
+    '{"version":1,"servers":[{"server":"example.com","server_port":443}]}';
 const String kSingboxJson =
     '{"log":{"level":"info"},"outbounds":[{"type":"direct","tag":"direct"}],'
     '"route":{"final":"direct"}}';
@@ -40,7 +43,11 @@ const String kSingboxWithEndpoint =
 const String kSip008Base64 = 'eyJ2ZXJzaW9uIjoxLCJzZXJ2ZXJzIjpbXX0=';
 
 const List<ImportFixture> importFixtures = <ImportFixture>[
-  ImportFixture(name: 'share-link', text: kShareLink, expectedKind: ImportKind.shareLink),
+  ImportFixture(
+    name: 'share-link',
+    text: kShareLink,
+    expectedKind: ImportKind.shareLink,
+  ),
   ImportFixture(
     name: 'multi-link-crlf',
     text: '$kShareLink\r\n$kShareLinkSecond\r\n',
@@ -52,9 +59,17 @@ const List<ImportFixture> importFixtures = <ImportFixture>[
     source: ImportSource.qr,
     expectedKind: ImportKind.subscriptionUrl,
   ),
-  ImportFixture(name: 'clash-yaml', text: kClashYaml, expectedKind: ImportKind.clashYaml),
+  ImportFixture(
+    name: 'clash-yaml',
+    text: kClashYaml,
+    expectedKind: ImportKind.clashYaml,
+  ),
   ImportFixture(name: 'sip008', text: kSip008, expectedKind: ImportKind.sip008),
-  ImportFixture(name: 'singbox-json', text: kSingboxJson, expectedKind: ImportKind.singboxJson),
+  ImportFixture(
+    name: 'singbox-json',
+    text: kSingboxJson,
+    expectedKind: ImportKind.singboxJson,
+  ),
   ImportFixture(
     name: 'singbox-with-endpoint',
     text: kSingboxWithEndpoint,
@@ -62,8 +77,16 @@ const List<ImportFixture> importFixtures = <ImportFixture>[
   ),
   ImportFixture(name: 'empty', text: '', expectError: true),
   ImportFixture(name: 'whitespace', text: '   \n\t ', expectError: true),
-  ImportFixture(name: 'html-error-page', text: '<html><body>502 Bad Gateway</body></html>', expectError: true),
-  ImportFixture(name: 'unknown-scheme', text: 'ftp://example.com/file', expectError: true),
+  ImportFixture(
+    name: 'html-error-page',
+    text: '<html><body>502 Bad Gateway</body></html>',
+    expectError: true,
+  ),
+  ImportFixture(
+    name: 'unknown-scheme',
+    text: 'ftp://example.com/file',
+    expectError: true,
+  ),
   ImportFixture(name: 'plain-text', text: 'hello world', expectError: true),
   ImportFixture(
     name: 'qr-javascript',
@@ -77,5 +100,10 @@ const List<ImportFixture> importFixtures = <ImportFixture>[
     source: ImportSource.qr,
     expectError: true,
   ),
-  ImportFixture(name: 'qr-control-char', text: 'vless://a\u0000b', source: ImportSource.qr, expectError: true),
+  ImportFixture(
+    name: 'qr-control-char',
+    text: 'vless://a\u0000b',
+    source: ImportSource.qr,
+    expectError: true,
+  ),
 ];

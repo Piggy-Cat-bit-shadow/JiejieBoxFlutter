@@ -28,10 +28,7 @@ class RefreshOutcome {
 }
 
 class ProviderRefreshCoordinator {
-  ProviderRefreshCoordinator({
-    required this.bridge,
-    required this.repository,
-  });
+  ProviderRefreshCoordinator({required this.bridge, required this.repository});
 
   final HostBridge bridge;
   final ProfileRepository repository;
@@ -41,8 +38,10 @@ class ProviderRefreshCoordinator {
     Duration timeout = const Duration(seconds: 60),
   }) async {
     final Map<String, String> before = await _revisions();
-    final ProviderRefreshResult result =
-        await bridge.refreshProviders(tags, timeout: timeout);
+    final ProviderRefreshResult result = await bridge.refreshProviders(
+      tags,
+      timeout: timeout,
+    );
     final Map<String, String> after = await _revisions();
     return RefreshOutcome(
       supported: result.supported,

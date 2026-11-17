@@ -24,8 +24,16 @@ void main() {
 
   test('fixtures never carry credentials', () {
     for (final ImportFixture fixture in importFixtures) {
-      expect(fixture.text.toLowerCase(), isNot(contains('password')), reason: fixture.name);
-      expect(fixture.text, isNot(contains('BEGIN PRIVATE KEY')), reason: fixture.name);
+      expect(
+        fixture.text.toLowerCase(),
+        isNot(contains('password')),
+        reason: fixture.name,
+      );
+      expect(
+        fixture.text,
+        isNot(contains('BEGIN PRIVATE KEY')),
+        reason: fixture.name,
+      );
     }
   });
 
@@ -48,10 +56,9 @@ void main() {
         continue;
       }
       await expectLater(
-        pipeline.prepare(ImportRequest(
-          source: fixture.source,
-          text: fixture.text,
-        )),
+        pipeline.prepare(
+          ImportRequest(source: fixture.source, text: fixture.text),
+        ),
         throwsA(isA<ImportException>()),
         reason: fixture.name,
       );
@@ -64,21 +71,26 @@ void main() {
       if (fixture.expectError) {
         continue;
       }
-      final ImportPlan plan = await pipeline.prepare(ImportRequest(
-        source: fixture.source,
-        text: fixture.text,
-      ));
+      final ImportPlan plan = await pipeline.prepare(
+        ImportRequest(source: fixture.source, text: fixture.text),
+      );
       expect(plan.kind, fixture.expectedKind, reason: fixture.name);
       expect(plan.sha256.length, 64, reason: fixture.name);
       expect(plan.bytes.length, greaterThan(0), reason: fixture.name);
     }
   });
 
-  test('an endpoint-bearing document is routed to the core, not rewritten', () async {
-    final ImportPlan plan = await pipeline.prepare(
-      const ImportRequest(source: ImportSource.file, text: kSingboxWithEndpoint),
-    );
-    expect(plan.check!.ok, isTrue);
-    expect(utf8.decode(plan.bytes), kSingboxWithEndpoint);
-  });
+  test(
+    'an endpoint-bearing document is routed to the core, not rewritten',
+    () async {
+      final ImportPlan plan = await pipeline.prepare(
+        const ImportRequest(
+          source: ImportSource.file,
+          text: kSingboxWithEndpoint,
+        ),
+      );
+      expect(plan.check!.ok, isTrue);
+      expect(utf8.decode(plan.bytes), kSingboxWithEndpoint);
+    },
+  );
 }
