@@ -74,6 +74,32 @@ class AppState extends ChangeNotifier {
     return id;
   }
 
+  void renameProfile(int id, String label) {
+    final index = profiles.indexWhere((profile) => profile.id == id);
+    if (index < 0 || label.trim().isEmpty) {
+      return;
+    }
+    profiles[index] = ProfileEntry(
+      id: id,
+      label: label.trim(),
+      subtitle: profiles[index].subtitle,
+    );
+    notifyListeners();
+  }
+
+  void deleteProfile(int id) {
+    final index = profiles.indexWhere((profile) => profile.id == id);
+    if (index < 0) {
+      return;
+    }
+    profiles.removeAt(index);
+    drafts.remove(id);
+    if (selectedProfileId == id) {
+      selectedProfileId = null;
+    }
+    notifyListeners();
+  }
+
   /// Set when an AddProfileMenu entry is chosen; A2 consumes it. Keeping the
   /// intent explicit avoids a "button that silently does nothing" ambiguity.
   String? lastAddIntent;

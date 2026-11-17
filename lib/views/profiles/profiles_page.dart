@@ -5,6 +5,8 @@ import 'package:prism_ui/prism_ui.dart';
 import '../../common/constant.dart';
 import '../../common/context.dart';
 import '../../common/layout.dart';
+import '../../features/form/form_page.dart';
+import '../../features/form/form_row.dart';
 import '../../state/app_state.dart';
 import '../../ui/icons/app_glyphs.dart';
 import '../../ui/list_item.dart';
@@ -66,6 +68,34 @@ class ProfilesPage extends StatelessWidget {
   }
 }
 
+Future<void> _renameProfile(
+  BuildContext context,
+  AppState state,
+  ProfileEntry profile,
+) async {
+  final name = await showFormSheet<String>(
+    context: context,
+    builder: (_) => _RenameForm(profile: profile),
+  );
+  if (name != null) {
+    state.renameProfile(profile.id, name);
+  }
+}
+
+Future<void> _deleteProfile(
+  BuildContext context,
+  AppState state,
+  ProfileEntry profile,
+) async {
+  final confirmed = await showFormSheet<bool>(
+    context: context,
+    builder: (_) => _DeleteForm(profile: profile),
+  );
+  if (confirmed == true) {
+    state.deleteProfile(profile.id);
+  }
+}
+
 class _ProfilesGrid extends StatelessWidget {
   const _ProfilesGrid();
 
@@ -105,6 +135,8 @@ class _ProfilesGrid extends StatelessWidget {
               profile: profile,
               groupValue: state.selectedProfileId,
               onChanged: state.selectProfile,
+              onRename: () => _renameProfile(context, state, profile),
+              onDelete: () => _deleteProfile(context, state, profile),
             );
           },
         );
@@ -122,17 +154,36 @@ class ProfileItem extends StatelessWidget {
     required this.profile,
     required this.groupValue,
     required this.onChanged,
+    required this.onRename,
+    required this.onDelete,
   });
 
   final ProfileEntry profile;
   final int? groupValue;
   final ValueChanged<int> onChanged;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final isSelected = profile.id == groupValue;
     final itemHeight = _profileItemHeight(context);
-    return Card(
+    final l10n = context.appLocalizations;
+    return ContextMenuRegion(
+      menuItems: [
+        PopupMenuItem(
+          glyph: AppGlyphs.textShort,
+          label: l10n.rename,
+          onPressed: onRename,
+        ),
+        PopupMenuItem(
+          danger: true,
+          glyph: AppGlyphs.delete,
+          label: l10n.delete,
+          onPressed: onDelete,
+        ),
+      ],
+      child: Card(
       enterActionsOnRight: true,
       radius: AppCorner.xl,
       isSelected: isSelected,
@@ -162,6 +213,73 @@ class ProfileItem extends StatelessWidget {
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+class _RenameForm extends StatefulWidget {
+  const _RenameForm({required this.profile});
+
+  final ProfileEntry profile;
+
+  @override
+  State<_RenameForm> createState() => _RenameFormState();
+}
+
+class _RenameFormState extends State<_RenameForm> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.profile.label);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.appLocalizations;
+    return FormPage(
+      title: l10n.rename,
+      onSave: () {
+        final value = _controller.text.trim();
+        if (value.isNotEmpty) {
+          Navigator.of(context).pop(value);
+        }
+      },
+      children: [
+        Card(
+          child: FormRow(
+            title: l10n.name,
+            trailing: FormRowTextField(controller: _controller, autofocus: true),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteForm extends StatelessWidget {
+  const _DeleteForm({required this.profile});
+
+  final ProfileEntry profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.appLocalizations;
+    return FormPage(
+      title: l10n.delete,
+      saveLabel: l10n.delete,
+      onSave: () => Navigator.of(context).pop(true),
+      children: [
+        Text('Delete "${profile.label}"? This cannot be undone.'),
+      ],
     );
   }
 }

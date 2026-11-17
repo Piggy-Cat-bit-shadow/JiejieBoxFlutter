@@ -30,12 +30,14 @@ class AddProfileMenu extends StatelessWidget {
     BuildContext context, {
     required ImportSource source,
     String initialText = '',
+    String initialLabel = '',
   }) async {
     final state = AppStateScope.read(context);
     final draft = await showImportSheet(
       context,
       source: source,
       initialText: initialText,
+      initialLabel: initialLabel,
     );
     if (draft == null) {
       return;
@@ -98,6 +100,9 @@ class AddProfileMenu extends StatelessWidget {
               context,
               source: ImportSource.template,
               initialText: defaultConfigTemplate,
+              initialLabel: defaultTemplateLabel(
+                AppStateScope.read(context).profiles.length,
+              ),
             ),
           ),
           PopupMenuItem(

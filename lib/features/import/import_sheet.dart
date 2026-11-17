@@ -33,18 +33,28 @@ Future<ImportDraft?> showImportSheet(
   BuildContext context, {
   required ImportSource source,
   String initialText = '',
+  String initialLabel = '',
 }) {
   return showFormSheet<ImportDraft>(
     context: context,
-    builder: (_) => _ImportForm(source: source, initialText: initialText),
+    builder: (_) => _ImportForm(
+      source: source,
+      initialText: initialText,
+      initialLabel: initialLabel,
+    ),
   );
 }
 
 class _ImportForm extends StatefulWidget {
-  const _ImportForm({required this.source, required this.initialText});
+  const _ImportForm({
+    required this.source,
+    required this.initialText,
+    this.initialLabel = '',
+  });
 
   final ImportSource source;
   final String initialText;
+  final String initialLabel;
 
   @override
   State<_ImportForm> createState() => _ImportFormState();
@@ -59,7 +69,7 @@ class _ImportFormState extends State<_ImportForm> {
   @override
   void initState() {
     super.initState();
-    _labelController = TextEditingController();
+    _labelController = TextEditingController(text: widget.initialLabel);
     _textController = TextEditingController(text: widget.initialText);
   }
 
