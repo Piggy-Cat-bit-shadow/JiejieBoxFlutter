@@ -3,8 +3,8 @@
 JiejieBox 五平台 Flutter 客户端（iOS / iPadOS / Android / macOS / Windows，本轮不做 Linux）。
 UI 母版为 **FlClash v0.9.3（Prism）**，功能裁剪参考 **B-box `newui`**，代理内核与配置语义以 **JiejieBox `testing`** 为唯一权威。
 
-> 本仓库当前处于 **P0（独立研究与 UI 证据）**：只包含基线锁定、验证工具与决策记录。
-> `flutter create` / `lib/**` 的 UI 骨架从 **A1（FlClash 保真底座）** 开始；平台目录由 **C** 负责。
+> 当前状态 **P6 收尾**：UI、五平台平台目录与真实内核宿主已集成在 `feat/p6-closure`。
+> 运行时链路、验证命令与残余环境限制见 `docs/P6_CLOSURE.md`。
 
 ## 目录
 
