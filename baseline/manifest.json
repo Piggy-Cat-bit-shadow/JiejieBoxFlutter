@@ -1,0 +1,123 @@
+{
+  "schema": "jiejiebox-flutter-baseline/1",
+  "phase": "P0",
+  "owner": "A (UI)",
+  "generated_at_utc": "2026-11-17T10:02:45+00:00",
+  "toolchain": {
+    "flutter": "3.50.0 (stable, framework ab2912035e, 2026-11-09)",
+    "dart": "3.14.0",
+    "flutter_sdk_path": "C:\\JJ\\tools\\flutter",
+    "pub_cache": "C:\\JJ\\pub-cache",
+    "go": "not installed on this machine (JiejieBox work is read-only here)",
+    "rust": "not installed (rust_api native-assets hook cannot build)"
+  },
+  "flclash_pubspec_constraints": {
+    "environment_sdk": ">=3.10.0 <4.0.0",
+    "lock_dart": ">=3.13.2 <4.0.0",
+    "lock_flutter": ">=3.47.2"
+  },
+  "repos": [
+    {
+      "name": "FlClash",
+      "role": "UI/layout/component authority (Prism v0.9.3)",
+      "remote": "https://github.com/chen08209/FlClash.git",
+      "path": "C:\\JJ\\repos\\FlClash",
+      "ref": "v0.9.3",
+      "commit": "be84736605527034689c95bf27828ff27d912c5e",
+      "tree": "57566087530ece79d5f63f68892e26ba87ffaadc",
+      "commit_date": "2026-11-04T15:22:01+08:00",
+      "dirty": false,
+      "submodules": [
+        {
+          "path": "plugins/prism_ui",
+          "commit": "63450c0ac0e8e1b2c0f3ed4ad7926dc94e083185"
+        },
+        {
+          "path": "core/Clash.Meta",
+          "commit": "024245dc72bc92f48237f865119afe0cd53ac9e6",
+          "note": "not initialised: upstream submodule URL is SSH; UI work does not need it"
+        }
+      ],
+      "files_sha256": {
+        "lib/common/layout.dart": "70317b4ff2f9c9c5cf1b8cc7bca2b5334a303552a77b9c13f8dd78141064fb8f",
+        "lib/common/constant.dart": "d08155ccac3b4501f2f396dbbe71a3ad313cd5ea275c89cadf15000176074882",
+        "lib/common/window.dart": "013eca2920d84cc3c481c564e91346582ee1854d5ead1e5ce583e34743f3cbe4",
+        "lib/views/profiles/profiles.dart": "e0fa8370288a6729611df86a4ac117c5e464354658c6af3a9edbeed7aa451a49",
+        "lib/views/profiles/add.dart": "9bb37316b7d9fafa80a742d418a157038e59fc034031c82abfc6c272cda93c2e",
+        "lib/views/navigation.dart": "dfd19d2e4587ad50d8736100478460b445e26dd66ed36ea3e598bb8055cb9ed8",
+        "lib/pages/home.dart": "decd86a4f8dad8372773700672cfc71af33b9f335cf0fd447658f76d120ea268",
+        "lib/features/form/form_row.dart": "573523cde6588821f2e77a04e062f9a0ef78746443c2e8cec10a8cf816c031c2",
+        "lib/ui/scaffold/scaffold.dart": "9ebbfb1bb0293e97ff366f52834dd6a8a31b4357b6afe067ea2a6bfbb2b9d52e",
+        "lib/views/dashboard/layout.dart": "c99e02e44ab64ea7ca8785ec50cbff6305087f6ecf4cddb3e4ffec2cc768ac59",
+        "lib/views/proxies/common.dart": "7dffc6fda463493800009b1533845bf800b72e5fd4af36758151b83b5ce38615"
+      }
+    },
+    {
+      "name": "prism_ui",
+      "role": "Prism design-system source (FlClash submodule pin)",
+      "remote": "https://github.com/chen08209/prism_ui.git",
+      "path": "C:\\JJ\\repos\\prism_ui",
+      "ref": "63450c0ac0e8e1b2c0f3ed4ad7926dc94e083185",
+      "commit": "63450c0ac0e8e1b2c0f3ed4ad7926dc94e083185",
+      "tree": "274644cb5f43985988055d05ca1e8c97aceeadd7",
+      "commit_date": "2026-11-03T16:53:16+08:00",
+      "dirty": false,
+      "submodules": [],
+      "files_sha256": {
+        "lib/metrics.dart": "df5e8b4979415de530ac1ff1d80bc9ec48ae276ab4e7a4777305e57f143285f0",
+        "lib/typography.dart": "2eb0033e409ad60727b83e3dd94a63140060ee8985d58ef91e8eebb5dbf312ff",
+        "lib/shape.dart": "2d8a73ab0dd6c1622153b5002840c2582b91b8020251b2f5b169ba9a1d5f6edf",
+        "lib/measure.dart": "42bebf51cb2a21df29c86ed9bdf8f22ab7618546eea04899d29b4a2647570a94",
+        "lib/context.dart": "1ef8a07775cc5b6700e53a8ea750d10194ea8496b60942a732f5fa5874ee49df",
+        "lib/sidebar.dart": "cd277371c5fd4c7e278745201887b2ebdb9ad6e9db5b1886c9e23e0d237b5f94",
+        "lib/button.dart": "c309ab70f2c330ab4ce384e28dc57a415f5c106b19723462585c9332a9c49cd9",
+        "lib/view_scope.dart": "287cb67a7b05fdfc5e294b6fca351228b7015a5f597c38528d3473a36f011c0d"
+      }
+    },
+    {
+      "name": "B-box",
+      "role": "feature-cut reference only (not a visual authority)",
+      "remote": "https://github.com/giturass/B-box.git",
+      "path": "C:\\JJ\\repos\\B-box",
+      "ref": "newui",
+      "commit": "5685b141efdbe2b161702c6045ee6d46dc25d3e8",
+      "tree": "6e5ff9466ade302ccd882f846d7b44014d3630fd",
+      "commit_date": "2026-11-17T01:41:11+08:00",
+      "dirty": false,
+      "submodules": [],
+      "files_sha256": {
+        "flutter/lib/components/form.dart": "58f255a49d38a35ace58b4232e615a6e07e67605c7c5180df518cf36e6880bb4",
+        "flutter/lib/components/profile_card.dart": "d566cfe812dc1e8162714f64e081e36d99c51c7b11eaf4ffda9616eeadc451e8",
+        "libbox/ui_nodes.go": "de0f7cac8fb9f0a864276dc88f68a261c3915f9bb60b8d6ef96b6bfbc5a55750"
+      }
+    },
+    {
+      "name": "JiejieBox",
+      "role": "kernel/API authority (testing branch)",
+      "remote": "https://github.com/Piggy-Cat-bit-shadow/JiejieBox.git",
+      "path": "C:\\JJ\\repos\\JiejieBox",
+      "ref": "testing",
+      "commit": "4dc2593fbc1bf736afd1d79a3fdec5f7371db328",
+      "tree": "44a6a2fa6a6d15051a96f48c061952ce155fa9f8",
+      "commit_date": "2026-11-17T10:31:13+08:00",
+      "dirty": false,
+      "submodules": [],
+      "files_sha256": {
+        "experimental/libbox/config.go": "efbbfd7d98cbfdc3b3f5ffb2dc8d68fa1cc7446d831fcc8508211f784eaf11b7",
+        "experimental/libbox/analysis.go": "07757fdf8b552fe66fa2ce83919e288c948dde4cc01353269b1cb5dc3e4bd3d6",
+        "experimental/libbox/command_client.go": "07e31c1cfd20b3111e6e7acde1c95dca6cf3c969a808f8458bc8d9a572819afb",
+        "experimental/libbox/command_types.go": "644c2f344bdc24a23841d2ba548439406fceae64217af9cbc19940597fcb3a39",
+        "provider/parser/parser.go": "a78257842c28ce282e9b474b5e824f91bdca26542a2f38a84dd756eeeac9675a",
+        "provider/parser/link.go": "5805a816ed0f193ff71bf4d5c133dc2b6d1f709a9bb9d5981384349df11911e7",
+        "option/provider.go": "74c3df4bf01de2cbd4b7c35f90f939ee1a06d385e306d8b0faf4ff11f071afb0",
+        "option/group.go": "9c1a0991ac2b19329400f2257650d4c177797cdbd6598cb0b48691f544612bef",
+        "go.mod": "475634041c0bf6d9604a915f3f0729f15713393533f494a70073a78fe9a433c4"
+      }
+    }
+  ],
+  "notes": [
+    "No third-party source is vendored yet; A1 decides the vendoring layout.",
+    "Never edit the clones above; changes go only into this repository.",
+    "FlClash core/Clash.Meta is intentionally uninitialised (SSH submodule, UI work does not need it)."
+  ]
+}

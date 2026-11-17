@@ -1,0 +1,31 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/GeneratedPluginRegistrant.*
+**/generated_plugin_registrant.*
+
+# Platform ephemeral
+windows/flutter/ephemeral/
+macos/Flutter/ephemeral/
+ios/Flutter/ephemeral/
+ios/Flutter/Flutter.framework/
+ios/Flutter/Flutter.podspec
+linux/flutter/ephemeral/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local overrides
+*.local
