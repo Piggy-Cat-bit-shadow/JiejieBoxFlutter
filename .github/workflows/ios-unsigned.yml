@@ -11,6 +11,8 @@ on:
       - feat/p7-final
     paths:
       - '.github/workflows/ios-unsigned.yml'
+      - 'ios/Runner.xcodeproj/project.pbxproj'
+      - 'ios/Runner/*.swift'
 
 permissions:
   contents: read
