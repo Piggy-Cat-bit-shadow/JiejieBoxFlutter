@@ -56,6 +56,24 @@ class AppState extends ChangeNotifier {
 
   int? selectedProfileId;
 
+  /// Draft contents by profile id. Kept in memory only in P2; the store moves
+  /// here in A3. Nothing is validated by the kernel yet.
+  final Map<int, String> drafts = <int, String>{};
+
+  int addProfileDraft({
+    required String label,
+    required String subtitle,
+    required String content,
+  }) {
+    final id = profiles.isEmpty
+        ? 1
+        : profiles.map((profile) => profile.id).reduce((a, b) => a > b ? a : b) + 1;
+    profiles.add(ProfileEntry(id: id, label: label, subtitle: subtitle));
+    drafts[id] = content;
+    notifyListeners();
+    return id;
+  }
+
   /// Set when an AddProfileMenu entry is chosen; A2 consumes it. Keeping the
   /// intent explicit avoids a "button that silently does nothing" ambiguity.
   String? lastAddIntent;

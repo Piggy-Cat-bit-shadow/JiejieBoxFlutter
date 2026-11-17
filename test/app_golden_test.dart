@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jiejiebox_flutter/app.dart';
 import 'package:jiejiebox_flutter/common/enums.dart';
 import 'package:jiejiebox_flutter/shell/home_shell.dart';
+import 'package:jiejiebox_flutter/features/form/form_page.dart';
 import 'package:jiejiebox_flutter/state/app_state.dart';
 import 'package:prism_ui/prism_ui.dart';
 
@@ -78,6 +79,28 @@ void main() {
       matchesGoldenFile('goldens/profiles_1280x880_ts14.png'),
     );
   });
+
+  for (final (size, name) in <(Size, String)>[
+    (Size(1280, 880), 'import_1280x880'),
+    (Size(375, 667), 'import_375x667'),
+  ]) {
+    testWidgets('golden $name', (tester) async {
+      await _pump(tester, size);
+      await tester.tap(find.byTooltip('Add profile'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Link'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(EditableText).last,
+        '{"outbounds":[{"type":"vless","tag":"a"},{"type":"vmess","tag":"b"}]}',
+      );
+      await tester.pumpAndSettle();
+      await expectLater(
+        find.byType(FormPage),
+        matchesGoldenFile('goldens/$name.png'),
+      );
+    });
+  }
 
   for (final (size, name) in <(Size, String)>[
     (Size(1280, 880), 'dashboard_1280x880'),
