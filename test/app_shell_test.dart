@@ -40,7 +40,8 @@ Future<AppState> _pump(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final state = AppState(initialViewSize: size)..textScale = textScale;
+  final state = AppState(seedProfiles: true, initialViewSize: size)
+    ..textScale = textScale;
   await tester.pumpWidget(JiejieBoxApp(state: state));
   await tester.pumpAndSettle();
   return state;

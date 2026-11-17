@@ -85,6 +85,21 @@ class ToolsPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Card(
+            child: ListItem(
+              leading: const GlyphIcon(AppGlyphs.cloudDownload),
+              title: const Text('Providers'),
+              subtitle: state.providerRefreshStatus == null
+                  ? null
+                  : Text(state.providerRefreshStatus!),
+              trailing: Text(
+                state.connection.isAvailable ? 'Refresh' : 'Unavailable',
+                style: trailingStyle,
+              ),
+              onTap: () => state.refreshProviders(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
             child: ListItem.open(
               leading: const GlyphIcon(AppGlyphs.info),
               title: Text(l10n.about),

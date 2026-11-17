@@ -93,8 +93,8 @@ class _CoreStatusStrip extends StatelessWidget {
                           : 'Start',
                       onPressed: () =>
                           connection.state == CoreServiceState.running
-                          ? connection.stop()
-                          : connection.start(),
+                          ? AppStateScope.read(context).stopService()
+                          : AppStateScope.read(context).startService(),
                     )
                   : null,
               subtitle: connection.reason == null

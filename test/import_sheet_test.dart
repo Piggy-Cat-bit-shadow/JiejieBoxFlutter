@@ -10,7 +10,7 @@ Future<AppState> _pump(WidgetTester tester, Size size) async {
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final state = AppState(initialViewSize: size);
+  final state = AppState(seedProfiles: true, initialViewSize: size);
   await tester.pumpWidget(
     JiejieBoxApp(state: state, locale: const Locale('en', 'US')),
   );

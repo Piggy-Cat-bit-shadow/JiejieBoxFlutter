@@ -1,46 +1,64 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
-import 'package:prism_ui/prism_ui.dart';
+import 'package:prism_ui/prism_ui.dart' show ThemeMode;
+import 'package:jjbox_bridge/jjbox_bridge.dart' as jb;
 
 import '../common/enums.dart';
 import '../common/layout.dart';
 import '../core/core_connection.dart';
 
-/// A profile row as the UI needs it. The real model (revision, file path,
-/// provider references) arrives with the A2 data layer; this shape is the
-/// minimum the ported card renders.
+/// A profile row as the UI needs it; ids/revisions are the host's.
 class ProfileEntry {
   const ProfileEntry({
     required this.id,
     required this.label,
     required this.subtitle,
+    this.revision = '',
+    this.kind = 'local',
+    this.source = 'local',
+    this.updatedAtMillis = 0,
   });
 
-  final int id;
+  final String id;
   final String label;
   final String subtitle;
+  final String revision;
+  final String kind;
+  final String source;
+  final int updatedAtMillis;
 }
 
-/// The single app-wide state for P1. It replaces FlClash's Riverpod graph for
-/// the shell only; pages read it through [AppStateScope].
-///
-/// Deliberately no core/proxy status lives here: nothing may render a
-/// "connected"/"updated" state until the A2 bridge provides one.
+/// App-wide UI state. Profiles/licenses come from the host when a bridge is
+/// present; without one the list stays empty and every core action reports its
+/// reason (no seeded demo profiles in the production constructor).
 class AppState extends ChangeNotifier {
-  AppState({Size initialViewSize = Size.zero, CoreConnection? coreConnection})
-    : _viewSize = initialViewSize,
-      connection = coreConnection ?? CoreConnection();
+  AppState({
+    Size initialViewSize = Size.zero,
+    CoreConnection? coreConnection,
+    bool seedProfiles = false,
+  }) : _viewSize = initialViewSize,
+       connection = coreConnection ?? CoreConnection() {
+    if (seedProfiles) {
+      profiles.addAll(const [
+        ProfileEntry(
+          id: 'demo-1',
+          label: 'JiejieBox',
+          subtitle: 'local · template',
+        ),
+        ProfileEntry(id: 'demo-2', label: 'Office', subtitle: 'remote · 6h'),
+        ProfileEntry(id: 'demo-3', label: 'Travel', subtitle: 'local'),
+      ]);
+    }
+  }
 
   Size _viewSize;
-
-  /// Core state comes from the platform bridge (CONTRACTS); with no bridge it
-  /// is [CoreServiceState.unavailable] and never shows a fake running state.
-  final CoreConnection connection;
-
-  Size get viewSize => _viewSize;
 
   ViewMode get viewMode => getViewMode(_viewSize.width);
 
   bool get isMobileView => viewMode == ViewMode.mobile;
+
+  final CoreConnection connection;
 
   double textScale = 1.0;
 
@@ -52,71 +70,90 @@ class AppState extends ChangeNotifier {
 
   PageLabel page = PageLabel.profiles;
 
-  /// P1 fixture: replaced by the host-side profile store in A2. It is data the
-  /// user owns, never a simulated connection state.
-  final List<ProfileEntry> profiles = <ProfileEntry>[
-    const ProfileEntry(id: 1, label: 'JiejieBox', subtitle: 'local · template'),
-    const ProfileEntry(id: 2, label: 'Office', subtitle: 'remote · 6h'),
-    const ProfileEntry(id: 3, label: 'Travel', subtitle: 'local'),
-  ];
+  final List<ProfileEntry> profiles = <ProfileEntry>[];
 
-  int? selectedProfileId;
+  /// Draft contents by profile id, for a local fallback and for A3's store.
+  final Map<String, String> drafts = <String, String>{};
 
-  /// Draft contents by profile id. Kept in memory only in P2; the store moves
-  /// here in A3. Nothing is validated by the kernel yet.
-  final Map<int, String> drafts = <int, String>{};
+  String? selectedProfileId;
 
-  int addProfileDraft({
-    required String label,
-    required String subtitle,
-    required String content,
-  }) {
-    final id = profiles.isEmpty
-        ? 1
-        : profiles
-                  .map((profile) => profile.id)
-                  .reduce((a, b) => a > b ? a : b) +
-              1;
-    profiles.add(ProfileEntry(id: id, label: label, subtitle: subtitle));
-    drafts[id] = content;
-    notifyListeners();
-    return id;
-  }
-
-  void renameProfile(int id, String label) {
-    final index = profiles.indexWhere((profile) => profile.id == id);
-    if (index < 0 || label.trim().isEmpty) {
-      return;
-    }
-    profiles[index] = ProfileEntry(
-      id: id,
-      label: label.trim(),
-      subtitle: profiles[index].subtitle,
-    );
-    notifyListeners();
-  }
-
-  void deleteProfile(int id) {
-    final index = profiles.indexWhere((profile) => profile.id == id);
-    if (index < 0) {
-      return;
-    }
-    profiles.removeAt(index);
-    drafts.remove(id);
-    if (selectedProfileId == id) {
-      selectedProfileId = null;
-    }
-    notifyListeners();
-  }
-
-  /// Set when an AddProfileMenu entry is chosen; A2 consumes it. Keeping the
-  /// intent explicit avoids a "button that silently does nothing" ambiguity.
   String? lastAddIntent;
 
-  void updateViewSize(Size size) {
-    if (size == _viewSize) {
+  String? lastActionError;
+
+  String? providerRefreshStatus;
+
+  bool _bootstrapped = false;
+
+  bool get isBootstrapped => _bootstrapped;
+
+  ProfileEntry? get currentProfile {
+    final id = selectedProfileId;
+    if (id == null) return null;
+    for (final profile in profiles) {
+      if (profile.id == id) return profile;
+    }
+    return null;
+  }
+
+  Future<void> bootstrap() async {
+    if (_bootstrapped) return;
+    _bootstrapped = true;
+    if (!connection.isAvailable || !connection.hasRealHost) {
+      notifyListeners();
       return;
     }
+    try {
+      final metas = await connection.listProfiles();
+      profiles
+        ..clear()
+        ..addAll(metas.map(_fromMeta));
+      await connection.refresh();
+      if (selectedProfileId == null && profiles.isNotEmpty) {
+        selectedProfileId = profiles.first.id;
+      }
+      lastActionError = null;
+    } on jb.HostError catch (error) {
+      lastActionError = error.message;
+    } on Object catch (error) {
+      lastActionError = '$error';
+    }
+    notifyListeners();
+  }
+
+  ProfileEntry _fromMeta(jb.ProfileMeta meta) {
+    final int bytes = meta.bytes;
+    return ProfileEntry(
+      id: meta.id,
+      label: meta.label,
+      subtitle: '${meta.kind} · ${meta.source} · $bytes B',
+      revision: meta.revision,
+      kind: meta.kind,
+      source: meta.source,
+      updatedAtMillis: meta.updatedAtMillis,
+    );
+  }
+
+  Future<void> reloadProfiles() async {
+    if (!connection.isAvailable || !connection.hasRealHost) return;
+    try {
+      final metas = await connection.listProfiles();
+      profiles
+        ..clear()
+        ..addAll(metas.map(_fromMeta));
+      if (selectedProfileId != null &&
+          !profiles.any((profile) => profile.id == selectedProfileId)) {
+        selectedProfileId = profiles.isEmpty ? null : profiles.first.id;
+      }
+      notifyListeners();
+    } on jb.HostError catch (error) {
+      lastActionError = error.message;
+      notifyListeners();
+    }
+  }
+
+  void updateViewSize(Size size) {
+    if (size == _viewSize) return;
     _viewSize = size;
     notifyListeners();
   }
@@ -127,37 +164,172 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectProfile(int id) {
+  void selectProfile(String id) {
     if (selectedProfileId == id) return;
+    final profile = profiles.firstWhere(
+      (entry) => entry.id == id,
+      orElse: () => const ProfileEntry(id: '', label: '', subtitle: ''),
+    );
+    if (!connection.isAvailable || !connection.hasRealHost) {
+      selectedProfileId = id;
+      notifyListeners();
+      return;
+    }
+    final previous = selectedProfileId;
     selectedProfileId = id;
     notifyListeners();
+    unawaited(_apply(profile, previous));
   }
 
-  void setSidebarExpanded(bool value) {
-    if (sidebarExpanded == value) return;
-    sidebarExpanded = value;
+  Future<void> _apply(ProfileEntry profile, String? previous) async {
+    try {
+      final report = await connection.applyProfile(
+        id: profile.id,
+        revision: profile.revision,
+      );
+      if (!report.applied) {
+        lastActionError = report.coreMessage ?? 'profile was not applied';
+        selectedProfileId = previous;
+        notifyListeners();
+        return;
+      }
+      lastActionError = null;
+      notifyListeners();
+    } on jb.HostError catch (error) {
+      lastActionError = error.message;
+      selectedProfileId = previous;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> startService() async {
+    final profile = currentProfile;
+    if (profile == null) {
+      lastActionError = 'no profile selected';
+      notifyListeners();
+      return false;
+    }
+    final ok = await connection.start(
+      profileId: profile.id,
+      profileRevision: profile.revision,
+    );
+    lastActionError = ok ? null : connection.reason;
+    notifyListeners();
+    return ok;
+  }
+
+  Future<bool> stopService() async {
+    final ok = await connection.stop();
+    lastActionError = ok ? null : connection.reason;
+    notifyListeners();
+    return ok;
+  }
+
+  Future<void> refreshProviders() async {
+    try {
+      final result = await connection.refreshProviders(const []);
+      providerRefreshStatus = !result.supported
+          ? 'Provider refresh is not supported by this host'
+          : result.failed.isEmpty
+          ? 'Refreshed ${result.refreshed.length} provider(s)'
+          : 'Refreshed ${result.refreshed.length}, failed ${result.failed.length}';
+    } on jb.HostError catch (error) {
+      providerRefreshStatus = 'Refresh failed: ${error.message}';
+    } on Object catch (error) {
+      providerRefreshStatus = 'Refresh failed: $error';
+    }
     notifyListeners();
   }
 
-  void setThemeMode(ThemeMode value) {
-    if (themeMode == value) return;
-    themeMode = value;
+  /// Host-backed import: preview, then a validated write. Returns the new id.
+  Future<String?> importConfig({
+    required String label,
+    required String content,
+    String kind = 'singbox-json',
+  }) async {
+    if (!connection.isAvailable || !connection.hasRealHost) {
+      return null;
+    }
+    try {
+      final preview = await connection.preview(content);
+      if (!preview.ok) {
+        lastActionError = preview.message ?? 'preview rejected the content';
+        notifyListeners();
+        return null;
+      }
+      final written = await connection.writeProfile(
+        label: label,
+        content: content,
+        kind: kind,
+        validate: true,
+      );
+      await reloadProfiles();
+      selectedProfileId = written.id;
+      lastActionError = null;
+      notifyListeners();
+      return written.id;
+    } on jb.HostError catch (error) {
+      lastActionError = error.message;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<void> deleteProfile(String id) async {
+    if (connection.isAvailable && connection.hasRealHost) {
+      final profile = profiles.firstWhere(
+        (entry) => entry.id == id,
+        orElse: () => const ProfileEntry(id: '', label: '', subtitle: ''),
+      );
+      try {
+        await connection.deleteProfile(
+          id,
+          expectedRevision: profile.revision.isEmpty ? null : profile.revision,
+        );
+      } on jb.HostError catch (error) {
+        lastActionError = error.message;
+        notifyListeners();
+        return;
+      }
+    }
+    final index = profiles.indexWhere((profile) => profile.id == id);
+    if (index < 0) return;
+    profiles.removeAt(index);
+    drafts.remove(id);
+    if (selectedProfileId == id) {
+      selectedProfileId = null;
+    }
     notifyListeners();
   }
 
-  void setTextScale(double value) {
-    if (textScale == value) return;
-    textScale = value;
+  void renameProfile(String id, String label) {
+    final index = profiles.indexWhere((profile) => profile.id == id);
+    if (index < 0 || label.trim().isEmpty) return;
+    final old = profiles[index];
+    profiles[index] = ProfileEntry(
+      id: id,
+      label: label.trim(),
+      subtitle: old.subtitle,
+      revision: old.revision,
+      kind: old.kind,
+      source: old.source,
+      updatedAtMillis: old.updatedAtMillis,
+    );
     notifyListeners();
   }
 
-  void setFloatingNavigationBar(bool value) {
-    if (floatingNavigationBar == value) return;
-    floatingNavigationBar = value;
+  String addProfileDraft({
+    required String label,
+    required String subtitle,
+    required String content,
+  }) {
+    final id = 'draft-${DateTime.now().microsecondsSinceEpoch}';
+    profiles.add(ProfileEntry(id: id, label: label, subtitle: subtitle));
+    drafts[id] = content;
     notifyListeners();
+    return id;
   }
 
-  /// Replaces the profile list; A2's store and the empty-state test both use it.
   void replaceProfiles(List<ProfileEntry> next) {
     profiles
       ..clear()
@@ -170,6 +342,30 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setTextScale(double value) {
+    if (textScale == value) return;
+    textScale = value;
+    notifyListeners();
+  }
+
+  void setThemeMode(ThemeMode value) {
+    if (themeMode == value) return;
+    themeMode = value;
+    notifyListeners();
+  }
+
+  void setFloatingNavigationBar(bool value) {
+    if (floatingNavigationBar == value) return;
+    floatingNavigationBar = value;
+    notifyListeners();
+  }
+
+  void setSidebarExpanded(bool value) {
+    if (sidebarExpanded == value) return;
+    sidebarExpanded = value;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     connection.dispose();
@@ -177,7 +373,6 @@ class AppState extends ChangeNotifier {
   }
 }
 
-/// Inherited access to [AppState]; the shell and pages rebuild on change.
 class AppStateScope extends InheritedNotifier<AppState> {
   const AppStateScope({
     super.key,
