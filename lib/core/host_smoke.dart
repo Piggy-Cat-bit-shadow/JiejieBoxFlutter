@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:jjbox_bridge/jjbox_bridge.dart' as jb;
 
+import 'core_connection.dart';
 import 'core_runtime.dart';
 
 /// Debug-only end-to-end probe used by the Windows build verifier.
@@ -44,32 +45,33 @@ Future<void> runHostSmoke() async {
         content: utf8.encode(config),
       );
       result['profileId'] = profile.id;
-      final jb.StartAck ack = await host.start(
-        revision: 1,
-        mode: 'proxy',
-        profileId: profile.id,
-        profileRevision: profile.revision,
+      final CoreConnection connection = CoreConnection(
+        bridge: runtime.bridge,
+        host: host,
       );
-      result['accepted'] = ack.accepted;
-      final jb.RuntimeStatus running = await host.status();
-      result['runningState'] = running.state;
-      final jb.ApplyReport applied = await host.applyProfile(
-        id: profile.id,
-        revision: profile.revision,
-        requestId: 'app-smoke-apply',
-        mode: 'proxy',
-      );
-      result['applied'] = applied.applied;
-      final jb.StartAck stopped = await host.stop(revision: 3);
-      result['stopped'] = stopped.accepted;
-      final jb.RuntimeStatus idle = await host.status();
-      result['idleState'] = idle.state;
-      result['ok'] =
-          ack.accepted &&
-          running.state == 'running' &&
-          applied.applied &&
-          stopped.accepted &&
-          idle.state == 'idle';
+      try {
+        final bool started = await connection.start(
+          profileId: profile.id,
+          profileRevision: profile.revision,
+        );
+        result['accepted'] = started;
+        result['runningState'] = connection.state.name;
+        final jb.ApplyReport applied = await connection.applyProfile(
+          id: profile.id,
+          revision: profile.revision,
+        );
+        result['applied'] = applied.applied;
+        final bool stopped = await connection.stop();
+        result['stopped'] = stopped;
+        result['idleState'] = connection.state.name;
+        result['ok'] =
+            started &&
+            connection.state.name == 'stopped' &&
+            applied.applied &&
+            stopped;
+      } finally {
+        connection.dispose();
+      }
     }
   } on Object catch (error) {
     result['error'] = '$error';

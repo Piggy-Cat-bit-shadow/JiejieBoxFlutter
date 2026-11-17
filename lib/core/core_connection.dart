@@ -89,6 +89,7 @@ class CoreConnection extends ChangeNotifier {
     'starting' => CoreServiceState.starting,
     'stopping' => CoreServiceState.stopping,
     'stopped' => CoreServiceState.stopped,
+    'idle' => CoreServiceState.stopped,
     'failed' => CoreServiceState.failed,
     _ => CoreServiceState.failed,
   };
