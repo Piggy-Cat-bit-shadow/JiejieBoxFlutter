@@ -25,7 +25,7 @@ void main() {
   ) async {
     final state = await _pump(
       tester,
-      AppState(initialViewSize: const Size(1280, 880)),
+      AppState(seedProfiles: true, initialViewSize: const Size(1280, 880)),
     );
     await tester.tap(find.byTooltip('Add profile'));
     await tester.pumpAndSettle();
@@ -50,10 +50,12 @@ void main() {
       'service.start': {},
     });
     final state = AppState(
+      seedProfiles: true,
       initialViewSize: const Size(1280, 880),
       coreConnection: CoreConnection(bridge: bridge),
     );
     await _pump(tester, state);
+    state.selectProfile('demo-1');
     state.setPage(PageLabel.dashboard);
     await tester.pumpAndSettle();
     expect(find.text('Start'), findsOneWidget);
@@ -66,7 +68,7 @@ void main() {
   testWidgets('no bridge shows the reason and no start button', (tester) async {
     final state = await _pump(
       tester,
-      AppState(initialViewSize: const Size(1280, 880)),
+      AppState(seedProfiles: true, initialViewSize: const Size(1280, 880)),
     );
     state.setPage(PageLabel.dashboard);
     await tester.pumpAndSettle();

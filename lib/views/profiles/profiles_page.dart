@@ -113,7 +113,7 @@ class _ProfilesGrid extends StatelessWidget {
           spacing: spacing,
           minItemWidth: profileItemMinWidth.ap(context),
         );
-        return GridView.builder(
+        final grid = GridView.builder(
           key: profilesStoreKey,
           padding: EdgeInsets.only(
             left: _horizontalPadding,
@@ -140,6 +140,24 @@ class _ProfilesGrid extends StatelessWidget {
             );
           },
         );
+        final error = state.lastActionError;
+        if (error == null) {
+          return grid;
+        }
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Card(
+                child: ListItem(
+                  leading: const GlyphIcon(AppGlyphs.info),
+                  title: Text(error, maxLines: 3),
+                ),
+              ),
+            ),
+            Expanded(child: grid),
+          ],
+        );
       },
     );
   }
@@ -159,8 +177,8 @@ class ProfileItem extends StatelessWidget {
   });
 
   final ProfileEntry profile;
-  final int? groupValue;
-  final ValueChanged<int> onChanged;
+  final String? groupValue;
+  final ValueChanged<String> onChanged;
   final VoidCallback onRename;
   final VoidCallback onDelete;
 
@@ -189,10 +207,22 @@ class ProfileItem extends StatelessWidget {
         isSelected: isSelected,
         onPressed: () => onChanged(profile.id),
         child: ListItem(
-          key: Key(profile.id.toString()),
+          key: Key(profile.id),
           minTileHeight: itemHeight,
           minVerticalPadding: listRowVerticalPadding,
-          trailing: isSelected ? const SelectionBadge(size: 24) : null,
+          trailing: (!isSelected && profile.updatedAtMillis == 0)
+              ? null
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (profile.updatedAtMillis != 0)
+                      Text(
+                        _updatedLabel(profile.updatedAtMillis),
+                        style: AppTextStyle.footnote.of(context).toLighter,
+                      ),
+                    if (isSelected) const SelectionBadge(size: 24),
+                  ],
+                ),
           title: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,4 +313,13 @@ class _DeleteForm extends StatelessWidget {
       children: [Text('Delete "${profile.label}"? This cannot be undone.')],
     );
   }
+}
+
+String _updatedLabel(int millis) {
+  final at = DateTime.fromMillisecondsSinceEpoch(millis);
+  final diff = DateTime.now().difference(at);
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+  if (diff.inDays < 1) return '${diff.inHours}h ago';
+  return '${diff.inDays}d ago';
 }

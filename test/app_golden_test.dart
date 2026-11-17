@@ -43,7 +43,7 @@ Future<AppState> _pump(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final state = AppState(initialViewSize: size)
+  final state = AppState(seedProfiles: true, initialViewSize: size)
     ..textScale = textScale
     ..themeMode = themeMode;
   await tester.pumpWidget(

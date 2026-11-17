@@ -7,6 +7,7 @@ import '../../core/core_bridge.dart';
 import '../../state/app_state.dart';
 import '../../ui/icons/app_glyphs.dart';
 import '../../features/import/default_template.dart';
+import '../../features/import/import_classifier.dart';
 import '../../features/import/import_sheet.dart';
 
 /// The four upstream ways to add a profile (FlClash v0.9.3
@@ -48,10 +49,26 @@ class AddProfileMenu extends StatelessWidget {
       ImportSource.clipboard => 'clipboard',
       ImportSource.template => 'template',
     };
+    if (state.connection.isAvailable && state.connection.hasRealHost) {
+      final id = await state.importConfig(
+        label: draft.label,
+        content: draft.text,
+        kind: switch (draft.format) {
+          ImportFormat.clashYaml => 'clash-yaml',
+          ImportFormat.sip008 => 'sip008',
+          ImportFormat.shareLinks || ImportFormat.base64Links => 'link-list',
+          _ => 'singbox-json',
+        },
+      );
+      if (id != null) {
+        state.noteAddIntent('${source.name}:${draft.format.name}');
+      }
+      return;
+    }
     var validation = 'unvalidated';
     try {
       final result = await state.connection.checkConfig(draft.text);
-      validation = result['valid'] == true ? 'validated' : 'invalid';
+      validation = result.ok ? 'validated' : 'invalid';
     } on BridgeException catch (error) {
       validation = 'unvalidated (check unavailable: ${error.code})';
     }

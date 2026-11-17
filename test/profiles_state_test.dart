@@ -6,16 +6,16 @@ import 'package:jiejiebox_flutter/state/app_state.dart';
 
 void main() {
   test('rename keeps id/subtitle and ignores empty names', () {
-    final state = AppState();
-    state.renameProfile(1, 'Work');
+    final state = AppState(seedProfiles: true);
+    state.renameProfile('demo-1', 'Work');
     expect(state.profiles.first.label, 'Work');
-    expect(state.profiles.first.id, 1);
-    state.renameProfile(1, '   ');
+    expect(state.profiles.first.id, 'demo-1');
+    state.renameProfile('demo-1', '   ');
     expect(state.profiles.first.label, 'Work');
   });
 
   test('delete removes the draft and clears selection', () {
-    final state = AppState();
+    final state = AppState(seedProfiles: true);
     final id = state.addProfileDraft(
       label: 'draft',
       subtitle: 'link · 1 nodes · unvalidated',
@@ -36,7 +36,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final state = AppState(initialViewSize: const Size(1280, 880));
+    final state = AppState(
+      seedProfiles: true,
+      initialViewSize: const Size(1280, 880),
+    );
     await tester.pumpWidget(
       JiejieBoxApp(state: state, locale: const Locale('en', 'US')),
     );
