@@ -29,7 +29,9 @@ void main() {
     expect(state.selectedProfileId, isNull);
   });
 
-  testWidgets('two template imports get distinct default labels', (tester) async {
+  testWidgets('two template imports get distinct default labels', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 880);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);

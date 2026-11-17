@@ -180,9 +180,7 @@ ImportPreview? _classifyJson(String text) {
       nodeCount: nodes,
       skipped: issues.length,
       issues: issues,
-      hints: [
-        if (nodes == 0) 'No proxy outbound found',
-      ],
+      hints: [if (nodes == 0) 'No proxy outbound found'],
     );
   }
   final servers = decoded['servers'];

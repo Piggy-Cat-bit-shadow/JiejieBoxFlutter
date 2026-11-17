@@ -73,7 +73,10 @@ class AppState extends ChangeNotifier {
   }) {
     final id = profiles.isEmpty
         ? 1
-        : profiles.map((profile) => profile.id).reduce((a, b) => a > b ? a : b) + 1;
+        : profiles
+                  .map((profile) => profile.id)
+                  .reduce((a, b) => a > b ? a : b) +
+              1;
     profiles.add(ProfileEntry(id: id, label: label, subtitle: subtitle));
     drafts[id] = content;
     notifyListeners();

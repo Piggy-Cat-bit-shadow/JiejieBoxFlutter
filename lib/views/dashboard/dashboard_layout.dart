@@ -56,7 +56,8 @@ class DashboardDensityScope extends InheritedWidget {
   static DashboardDensityScope? _of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<DashboardDensityScope>();
 
-  static DashboardDensity of(BuildContext context) => _of(context)?.density ?? DashboardDensity.mobile;
+  static DashboardDensity of(BuildContext context) =>
+      _of(context)?.density ?? DashboardDensity.mobile;
 
   static double scaleOf(BuildContext context) => _of(context)?.scale ?? 1;
 

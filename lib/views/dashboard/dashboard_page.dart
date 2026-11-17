@@ -36,20 +36,20 @@ class DashboardPage extends StatelessWidget {
           const _CoreStatusStrip(),
           Expanded(
             child: LayoutBuilder(
-        builder: (context, constraints) {
-          final room = constraints.biggest / scale;
-          final density = DashboardDensity.of(room);
-          return DashboardDensityScope(
-            density: density,
-            scale: scale,
-            child: density.isDesktop
-                ? _DesktopDashboard(
-                    columns: dashboardColumnsOf(room.width),
-                    gap: gap,
-                  )
-                : _MobileDashboard(gap: gap),
-          );
-        },
+              builder: (context, constraints) {
+                final room = constraints.biggest / scale;
+                final density = DashboardDensity.of(room);
+                return DashboardDensityScope(
+                  density: density,
+                  scale: scale,
+                  child: density.isDesktop
+                      ? _DesktopDashboard(
+                          columns: dashboardColumnsOf(room.width),
+                          gap: gap,
+                        )
+                      : _MobileDashboard(gap: gap),
+                );
+              },
             ),
           ),
         ],
@@ -91,7 +91,8 @@ class _CoreStatusStrip extends StatelessWidget {
                       label: connection.state == CoreServiceState.running
                           ? 'Stop'
                           : 'Start',
-                      onPressed: () => connection.state == CoreServiceState.running
+                      onPressed: () =>
+                          connection.state == CoreServiceState.running
                           ? connection.stop()
                           : connection.start(),
                     )

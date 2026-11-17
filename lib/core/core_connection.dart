@@ -2,7 +2,14 @@ import 'package:flutter/foundation.dart';
 
 import 'core_bridge.dart';
 
-enum CoreServiceState { unavailable, stopped, starting, running, stopping, failed }
+enum CoreServiceState {
+  unavailable,
+  stopped,
+  starting,
+  running,
+  stopping,
+  failed,
+}
 
 /// The single UI-side source of core state. Every transition comes from a
 /// bridge answer; when the bridge is absent the state is [unavailable] with a

@@ -122,9 +122,7 @@ class _DesktopShell extends StatelessWidget {
           onToggle: canExpand
               ? () => state.setSidebarExpanded(!state.sidebarExpanded)
               : null,
-          windowControls: system.isMacOS
-              ? macOSTrafficLightsArea
-              : Size.zero,
+          windowControls: system.isMacOS ? macOSTrafficLightsArea : Size.zero,
         ),
         Expanded(
           child: ClipRect(

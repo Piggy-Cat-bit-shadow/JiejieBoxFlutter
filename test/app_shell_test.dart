@@ -48,7 +48,8 @@ Future<AppState> _pump(
 
 int _profileColumns(WidgetTester tester) {
   final grid = tester.widget<GridView>(find.byType(GridView));
-  final delegate = grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+  final delegate =
+      grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
   return delegate.crossAxisCount;
 }
 
@@ -66,7 +67,10 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(_profileColumns(tester), expectedColumns);
         final isMobile = size.width <= 600;
-        expect(find.byType(NavigationBar), isMobile ? findsOneWidget : findsNothing);
+        expect(
+          find.byType(NavigationBar),
+          isMobile ? findsOneWidget : findsNothing,
+        );
         expect(
           find.byType(NavigationSidebar),
           isMobile ? findsNothing : findsOneWidget,

@@ -10,7 +10,9 @@ void main() {
     });
 
     test('html error page is not a config', () {
-      final preview = classifyImport('<!DOCTYPE html><html><body>502</body></html>');
+      final preview = classifyImport(
+        '<!DOCTYPE html><html><body>502</body></html>',
+      );
       expect(preview.format, ImportFormat.html);
       expect(preview.isUsable, isFalse);
     });
@@ -35,7 +37,10 @@ void main() {
           '{"outbounds":[{"type":"vless","tag":"a"},{"type":"vmess","tag":"a"}]}';
       final preview = classifyImport(text);
       expect(preview.nodeCount, 2);
-      expect(preview.issues.map((issue) => issue.message), contains('duplicate tag: a'));
+      expect(
+        preview.issues.map((issue) => issue.message),
+        contains('duplicate tag: a'),
+      );
     });
 
     test('json without outbounds/servers/proxies is unsupported', () {
@@ -66,7 +71,8 @@ rules:
     });
 
     test('base64 share links are unwrapped', () {
-      const links = 'ss://YWVzLTEyOC1nY206cGFzcw@127.0.0.1:8388#a\n'
+      const links =
+          'ss://YWVzLTEyOC1nY206cGFzcw@127.0.0.1:8388#a\n'
           'vless://uuid@example.com:443#b';
       final encoded = base64Encode(utf8.encode(links));
       final preview = classifyImport(encoded);
@@ -76,7 +82,8 @@ rules:
     });
 
     test('share links with CRLF, unknown scheme and duplicates', () {
-      const text = 'ss://a@1.1.1.1:1#one\r\n'
+      const text =
+          'ss://a@1.1.1.1:1#one\r\n'
           'unknown://x\r\n'
           'ss://a@1.1.1.1:1#one\r\n'
           'trojan://p@example.com:443#t\r\n';

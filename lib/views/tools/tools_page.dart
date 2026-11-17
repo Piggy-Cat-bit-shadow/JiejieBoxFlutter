@@ -65,14 +65,15 @@ class ToolsPage extends StatelessWidget {
                     '${(state.textScale * 100).round()}%',
                     style: trailingStyle,
                   ),
-                  onTap: () => state.setTextScale(
-                    state.textScale >= 1.4 ? 1.0 : 1.4,
-                  ),
+                  onTap: () =>
+                      state.setTextScale(state.textScale >= 1.4 ? 1.0 : 1.4),
                 ),
                 ListItem(
                   title: Text(l10n.navigationBarStyle),
                   trailing: Text(
-                    state.floatingNavigationBar ? l10n.floating : l10n.defaultText,
+                    state.floatingNavigationBar
+                        ? l10n.floating
+                        : l10n.defaultText,
                     style: trailingStyle,
                   ),
                   onTap: () => state.setFloatingNavigationBar(
@@ -121,7 +122,10 @@ class AboutPage extends StatelessWidget {
                 spacing: 8,
                 children: [
                   Text('JiejieBox', style: AppTextStyle.title3.of(context)),
-                  Text('Flutter client for iOS, iPadOS, Android, macOS, Windows.', style: style),
+                  Text(
+                    'Flutter client for iOS, iPadOS, Android, macOS, Windows.',
+                    style: style,
+                  ),
                   Text('UI baseline: FlClash v0.9.3 (Prism).', style: style),
                   Text('Core: JiejieBox testing.', style: style),
                 ],

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/widgets.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jiejiebox_flutter/app.dart';
 import 'package:jiejiebox_flutter/common/enums.dart';
@@ -20,8 +20,13 @@ Future<AppState> _pump(WidgetTester tester, AppState state) async {
 }
 
 void main() {
-  testWidgets('import records the failed config.check honestly', (tester) async {
-    final state = await _pump(tester, AppState(initialViewSize: const Size(1280, 880)));
+  testWidgets('import records the failed config.check honestly', (
+    tester,
+  ) async {
+    final state = await _pump(
+      tester,
+      AppState(initialViewSize: const Size(1280, 880)),
+    );
     await tester.tap(find.byTooltip('Add profile'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Link'));
@@ -37,7 +42,9 @@ void main() {
     expect(state.profiles.last.subtitle, contains('unvalidated'));
   });
 
-  testWidgets('start button only exists with a bridge and follows its status', (tester) async {
+  testWidgets('start button only exists with a bridge and follows its status', (
+    tester,
+  ) async {
     final bridge = ScriptedCoreBridge({
       'service.status': {'running': true},
       'service.start': {},
@@ -57,10 +64,16 @@ void main() {
   });
 
   testWidgets('no bridge shows the reason and no start button', (tester) async {
-    final state = await _pump(tester, AppState(initialViewSize: const Size(1280, 880)));
+    final state = await _pump(
+      tester,
+      AppState(initialViewSize: const Size(1280, 880)),
+    );
     state.setPage(PageLabel.dashboard);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Platform bridge is not connected'), findsOneWidget);
+    expect(
+      find.textContaining('Platform bridge is not connected'),
+      findsOneWidget,
+    );
     expect(find.text('Start'), findsNothing);
     expect(find.text('Core unavailable'), findsOneWidget);
   });

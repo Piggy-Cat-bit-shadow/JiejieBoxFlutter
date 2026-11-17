@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -75,12 +75,13 @@ void main() {
     expect(find.byType(HomeShell), findsOneWidget);
   });
 
-  testWidgets('text scale 1.4 at desktop keeps profile columns and no overflow', (
-    tester,
-  ) async {
-    await _pump(tester, const Size(1280, 880), textScale: 1.4);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'text scale 1.4 at desktop keeps profile columns and no overflow',
+    (tester) async {
+      await _pump(tester, const Size(1280, 880), textScale: 1.4);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('switching to dashboard keeps the shell', (tester) async {
     final state = await _pump(tester, const Size(1280, 880));

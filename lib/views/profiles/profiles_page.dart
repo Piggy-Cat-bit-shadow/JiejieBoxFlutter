@@ -184,35 +184,35 @@ class ProfileItem extends StatelessWidget {
         ),
       ],
       child: Card(
-      enterActionsOnRight: true,
-      radius: AppCorner.xl,
-      isSelected: isSelected,
-      onPressed: () => onChanged(profile.id),
-      child: ListItem(
-        key: Key(profile.id.toString()),
-        minTileHeight: itemHeight,
-        minVerticalPadding: listRowVerticalPadding,
-        trailing: isSelected ? const SelectionBadge(size: 24) : null,
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              profile.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyle.headline.of(context),
-            ),
-            const SizedBox(height: _infoGap),
-            Text(
-              profile.subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyle.footnote.of(context).toLighter,
-            ),
-          ],
+        enterActionsOnRight: true,
+        radius: AppCorner.xl,
+        isSelected: isSelected,
+        onPressed: () => onChanged(profile.id),
+        child: ListItem(
+          key: Key(profile.id.toString()),
+          minTileHeight: itemHeight,
+          minVerticalPadding: listRowVerticalPadding,
+          trailing: isSelected ? const SelectionBadge(size: 24) : null,
+          title: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                profile.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.headline.of(context),
+              ),
+              const SizedBox(height: _infoGap),
+              Text(
+                profile.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.footnote.of(context).toLighter,
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -257,7 +257,10 @@ class _RenameFormState extends State<_RenameForm> {
         Card(
           child: FormRow(
             title: l10n.name,
-            trailing: FormRowTextField(controller: _controller, autofocus: true),
+            trailing: FormRowTextField(
+              controller: _controller,
+              autofocus: true,
+            ),
           ),
         ),
       ],
@@ -277,9 +280,7 @@ class _DeleteForm extends StatelessWidget {
       title: l10n.delete,
       saveLabel: l10n.delete,
       onSave: () => Navigator.of(context).pop(true),
-      children: [
-        Text('Delete "${profile.label}"? This cannot be undone.'),
-      ],
+      children: [Text('Delete "${profile.label}"? This cannot be undone.')],
     );
   }
 }
