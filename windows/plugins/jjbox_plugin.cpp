@@ -26,6 +26,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include <condition_variable>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -39,7 +40,6 @@ namespace {
 using flutter::EncodableValue;
 
 constexpr DWORD kPipeIoTimeoutMs = 10000;
-constexpr UINT kCompletionMessage = WM_APP + 0x4A;
 
 std::string Utf8FromWide(const std::wstring& value) {
   if (value.empty()) return {};
@@ -58,6 +58,25 @@ std::wstring PipeName() {
   const DWORD read = GetEnvironmentVariableW(L"JJBOX_HOST_PIPE", buffer, 512);
   if (read > 0 && read < 512) return std::wstring(buffer, read);
   return L"\\\\.\\pipe\\jjbox-host";
+}
+
+// Opt-in diagnostic log: set JJBOX_PLUGIN_LOG to a writable path. The plugin
+// otherwise stays silent; this is how the Windows runtime proves which stage
+// (method channel, worker, PostMessage, callback) is alive.
+void DebugLog(const std::string& message) {
+  wchar_t path[1024] = {0};
+  const DWORD read = GetEnvironmentVariableW(L"JJBOX_PLUGIN_LOG", path, 1024);
+  if (read == 0 || read >= 1024) return;
+  const std::string utf8 = Utf8FromWide(std::wstring(path, read));
+  std::ofstream stream(utf8, std::ios::app);
+  if (!stream) return;
+  SYSTEMTIME now;
+  GetLocalTime(&now);
+  char stamp[64];
+  snprintf(stamp, sizeof(stamp), "%04d-%02d-%02dT%02d:%02d:%02d.%03d ",
+           now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
+           now.wSecond, now.wMilliseconds);
+  stream << stamp << message << "\n";
 }
 
 std::string SniffString(const std::string& payload, const std::string& key) {
@@ -290,6 +309,8 @@ bool ReadAll(HANDLE pipe, char* data, DWORD length) {
 
 class JjboxPlugin;
 
+JjboxPlugin* g_plugin = nullptr;
+
 // One connection. Send is called on a worker thread, never on the platform
 // thread; the mutex serialises a write with its matching read.
 class HostLink {
@@ -357,18 +378,23 @@ class JjboxPlugin : public flutter::Plugin {
   explicit JjboxPlugin(flutter::PluginRegistrarWindows* registrar)
       : registrar_(registrar), link_(new HostLink(this)) {
     if (auto* view = registrar_->GetView()) {
-      window_handle_ = view->GetNativeWindow();
+      // Keep the view handle; the runner parents it only after registration.
+      // Resolve the top-level window at post time instead of here.
+      view_handle_ = view->GetNativeWindow();
     }
-    if (window_handle_ != nullptr) {
+    if (view_handle_ != nullptr) {
       window_proc_delegate_id_ = registrar_->RegisterTopLevelWindowProcDelegate(
           [this](HWND, UINT message, WPARAM, LPARAM) -> std::optional<LRESULT> {
-            if (message == kCompletionMessage) {
+            if (message == kJjboxPluginCompletionMessage) {
               DrainCompletions();
               return 0;
             }
             return std::nullopt;
           });
     }
+    DebugLog("ctor view=" + std::to_string(reinterpret_cast<uintptr_t>(view_handle_)) +
+             " delegate=" + std::to_string(window_proc_delegate_id_));
+    g_plugin = this;
     commands_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
         registrar->messenger(), jjbox::kCommandsChannel,
         &flutter::StandardMethodCodec::GetInstance());
@@ -392,7 +418,10 @@ class JjboxPlugin : public flutter::Plugin {
     if (window_proc_delegate_id_ != 0) {
       registrar_->UnregisterTopLevelWindowProcDelegate(window_proc_delegate_id_);
     }
+    if (g_plugin == this) g_plugin = nullptr;
   }
+
+  void DrainFromPlatformThread() { DrainCompletions(); }
 
  private:
   struct Completion {
@@ -414,6 +443,7 @@ class JjboxPlugin : public flutter::Plugin {
     }
     const std::string method = SniffString(*payload, "method");
     const std::string id = SniffString(*payload, "id");
+    DebugLog("handle method=" + method + " id=" + id);
     if (method == "clipboard.readCandidate") {
       const std::string text = ReadClipboardText();
       result->Success(EncodableValue(OkEnvelope(
@@ -445,6 +475,9 @@ class JjboxPlugin : public flutter::Plugin {
                  result = std::move(result)]() mutable {
       std::string response;
       const bool ok = link_->Send(payload, &response);
+      DebugLog("send ok=" + std::string(ok ? "1" : "0") +
+               " request=" + std::to_string(payload.size()) +
+               " response=" + std::to_string(response.size()));
       {
         std::lock_guard<std::mutex> guard(completion_mutex_);
         auto completion = std::make_unique<Completion>();
@@ -453,8 +486,16 @@ class JjboxPlugin : public flutter::Plugin {
         completion->response = std::move(response);
         completions_.push_back(std::move(completion));
       }
-      if (window_handle_ != nullptr) {
-        PostMessageW(window_handle_, kCompletionMessage, 0, 0);
+      HWND target = view_handle_ != nullptr ? GetAncestor(view_handle_, GA_ROOT)
+                                            : nullptr;
+      if (target != nullptr) {
+        const BOOL posted =
+            PostMessageW(target, kJjboxPluginCompletionMessage, 0, 0);
+        DebugLog("post target=" + std::to_string(reinterpret_cast<uintptr_t>(target)) +
+                 " result=" + std::string(posted ? "1" : "0") +
+                 " error=" + std::to_string(GetLastError()));
+      } else {
+        DebugLog("post skipped: no top-level hwnd");
       }
       {
         std::lock_guard<std::mutex> guard(completion_mutex_);
@@ -470,6 +511,7 @@ class JjboxPlugin : public flutter::Plugin {
       std::lock_guard<std::mutex> guard(completion_mutex_);
       ready.swap(completions_);
     }
+    DebugLog("drain count=" + std::to_string(ready.size()));
     for (auto& completion : ready) {
       if (completion->ok) {
         completion->result->Success(EncodableValue(completion->response));
@@ -484,7 +526,7 @@ class JjboxPlugin : public flutter::Plugin {
   std::unique_ptr<HostLink> link_;
   std::unique_ptr<flutter::MethodChannel<EncodableValue>> commands_;
   std::unique_ptr<flutter::MethodChannel<EncodableValue>> callbacks_;
-  HWND window_handle_ = nullptr;
+  HWND view_handle_ = nullptr;
   int window_proc_delegate_id_ = 0;
   std::mutex completion_mutex_;
   std::condition_variable completion_cv_;
@@ -498,4 +540,10 @@ class JjboxPlugin : public flutter::Plugin {
 void JjboxPluginRegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar) {
   auto plugin = std::make_unique<JjboxPlugin>(registrar);
   registrar->AddPlugin(std::move(plugin));
+}
+
+void JjboxPluginDrainCompletions() {
+  if (g_plugin != nullptr) {
+    g_plugin->DrainFromPlatformThread();
+  }
 }

@@ -142,7 +142,7 @@ class CoreConnection extends ChangeNotifier {
       _set(CoreServiceState.starting);
       try {
         final ack = await bridge.start(
-          revision: _revision,
+          revision: _revision + 1,
           mode: resolvedMode,
           profileId: profileId,
           profileRevision: profileRevision,
@@ -176,7 +176,7 @@ class CoreConnection extends ChangeNotifier {
     if (bridge != null) {
       _set(CoreServiceState.stopping);
       try {
-        final ack = await bridge.stop(revision: _revision);
+        final ack = await bridge.stop(revision: _revision + 1);
         await refresh();
         return ack.accepted;
       } on jb.HostError catch (error) {
@@ -240,12 +240,18 @@ class CoreConnection extends ChangeNotifier {
   Future<jb.ApplyReport> applyProfile({
     required String id,
     required String revision,
-  }) => _requireHost().applyProfile(
-    id: id,
-    revision: revision,
-    requestId: '${DateTime.now().microsecondsSinceEpoch}',
-    mode: Platform.isWindows ? 'proxy' : 'vpn',
-  );
+  }) async {
+    final report = await _requireHost().applyProfile(
+      id: id,
+      revision: revision,
+      requestId: '${DateTime.now().microsecondsSinceEpoch}',
+      mode: Platform.isWindows ? 'proxy' : 'vpn',
+    );
+    // The host advances its own intent revision on apply; refresh so a later
+    // stop uses a revision newer than the one the apply consumed.
+    await refresh();
+    return report;
+  }
 
   Future<jb.ProviderRefreshResult> refreshProviders(List<String> tags) =>
       _requireHost().refreshProviders(tags);

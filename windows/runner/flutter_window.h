@@ -3,6 +3,7 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/plugin_registrar_windows.h>
 
 #include <memory>
 
@@ -28,6 +29,10 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // App-local bridge plugin. It needs the Windows registrar for the method
+  // channel and the top-level window proc used to return worker results.
+  std::unique_ptr<flutter::PluginRegistrarWindows> jjbox_registrar_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

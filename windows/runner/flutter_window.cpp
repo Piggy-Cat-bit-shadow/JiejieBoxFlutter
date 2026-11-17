@@ -27,8 +27,11 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
-  JjboxPluginRegisterWithRegistrar(
+  // The bridge is app-local, not a generated pub plugin: wrap the engine's
+  // registrar so JjboxPlugin can own a MethodChannel and window-proc delegate.
+  jjbox_registrar_ = std::make_unique<flutter::PluginRegistrarWindows>(
       flutter_controller_->engine()->GetRegistrarForPlugin("JjboxPlugin"));
+  JjboxPluginRegisterWithRegistrar(jjbox_registrar_.get());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -44,6 +47,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  jjbox_registrar_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -55,6 +59,13 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // The app-local bridge worker posts this after a host call completes. Drain
+  // here, on the platform thread, before Flutter sees the message.
+  if (message == kJjboxPluginCompletionMessage) {
+    JjboxPluginDrainCompletions();
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

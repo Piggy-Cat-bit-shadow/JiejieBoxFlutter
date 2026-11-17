@@ -87,7 +87,25 @@ Future<CoreRuntime> createCoreRuntime({
   final String detail = transportFailure == null
       ? '$lastError'
       : '$transportFailure; $lastError';
+  _log('probe failed: $detail');
   return CoreRuntime(UnavailableCoreBridge('Host bridge unavailable: $detail'));
+}
+
+void _log(String message) {
+  try {
+    final String localAppData = Platform.environment['LOCALAPPDATA'] ?? '';
+    final Directory dir = localAppData.isNotEmpty
+        ? Directory('$localAppData\\JiejieBox\\host')
+        : Directory('${Directory.systemTemp.path}\\JiejieBox\\host');
+    dir.createSync(recursive: true);
+    File('${dir.path}\\runtime.log').writeAsStringSync(
+      '${DateTime.now().toIso8601String()} $message\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  } on Object {
+    // Diagnostics must not change availability.
+  }
 }
 
 bool _shouldSpawnHost() =>

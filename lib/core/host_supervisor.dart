@@ -26,11 +26,16 @@ class HostSupervisor {
   }) async {
     if (!Platform.isWindows) return null;
     final String? exe = executable ?? _findExecutable();
-    if (exe == null) return null;
+    if (exe == null) {
+      _log('find: no core_host executable');
+      return null;
+    }
     final Directory dataDir = _dataDirectory();
+    _log('start: exe=$exe data=${dataDir.path}');
     try {
       await dataDir.create(recursive: true);
-    } on Object {
+    } on Object catch (error) {
+      _log('data dir failed: $error');
       return null;
     }
     final Process process;
@@ -43,7 +48,8 @@ class HostSupervisor {
         '--parent-pid',
         pid.toString(),
       ]);
-    } on Object {
+    } on Object catch (error) {
+      _log('spawn failed: $error');
       return null;
     }
     final HostSupervisor supervisor = HostSupervisor._(exe, process);
@@ -77,9 +83,11 @@ class HostSupervisor {
       started = false;
     }
     if (!started) {
+      _log('not ready: ${supervisor.output.join(' | ')}');
       await supervisor.stop();
       return null;
     }
+    _log('ready: ${supervisor.output.join(' | ')}');
     return supervisor;
   }
 
@@ -130,5 +138,19 @@ class HostSupervisor {
       return Directory('$localAppData\\JiejieBox\\host');
     }
     return Directory('${Directory.systemTemp.path}\\JiejieBox\\host');
+  }
+
+  static void _log(String message) {
+    try {
+      final Directory dir = _dataDirectory();
+      dir.createSync(recursive: true);
+      File('${dir.path}\\supervisor.log').writeAsStringSync(
+        '${DateTime.now().toIso8601String()} $message\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+    } on Object {
+      // Diagnostics must never decide whether the host starts.
+    }
   }
 }
