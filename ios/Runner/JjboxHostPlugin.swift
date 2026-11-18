@@ -12,6 +12,7 @@ import UIKit
 /// starts the tunnel with the selected document in `startVPNTunnel(options:)`.
 final class JjboxHostPlugin: NSObject, FlutterPlugin {
   private let store = ProfileStore()
+  private let runtime = JjboxRuntimeClient()
   private var manager: NETunnelProviderManager?
   private var callbacks: FlutterMethodChannel?
 
@@ -84,7 +85,9 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
         "clipboardWatch": true,
         "notifications": false,
         "deepLink": false,
-        "events": false,
+        "events": true,
+        "runtime": true,
+        "hostEpoch": self.runtime.hostEpoch,
         "memoryPressure": false,
         "serviceModes": ["vpn"],
       ]))
@@ -107,6 +110,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
       return
     }
     if method == "host.shutdown" {
+      runtime.stop()
       manager?.connection.stopVPNTunnel()
       result(Self.okEnvelope(id: id, result: [:]))
       return
@@ -116,6 +120,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
       return
     }
     if method == "service.stop" {
+      runtime.stop()
       manager?.connection.stopVPNTunnel()
       result(Self.okEnvelope(id: id, result: ["accepted": true, "revision": args["revision"] ?? 0]))
       return
@@ -162,10 +167,27 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
       handleProfile(method: method, args: args, id: id, result: result)
       return
     }
+    if method == "events.poll" {
+      if let event = runtime.poll() {
+        result(Self.okEnvelope(id: id, result: ["event": Self.base64FromString(event)]))
+      } else {
+        result(Self.okEnvelope(id: id, result: [:]))
+      }
+      return
+    }
     if method == "provider.refresh" {
-      result(Self.okEnvelope(id: id, result: [
-        "supported": false, "refreshed": [], "failed": [:], "durationMillis": 0,
-      ]))
+      let tags = (args["tags"] as? [String]) ?? []
+      let timeout = Int64(args["timeoutMillis"] as? Int ?? 60_000)
+      do {
+        let answer = try runtime.refreshProviders(tags: tags, timeoutMillis: timeout)
+        result(Self.okEnvelope(id: id, result: answer))
+      } catch {
+        result(Self.errorEnvelope(id, "unsupported_platform", error.localizedDescription))
+      }
+      return
+    }
+    if method.hasPrefix("group.") || method.hasPrefix("mode.") || method.hasPrefix("logs.") || method.hasPrefix("connections.") {
+      handleRuntime(method: method, args: args, id: id, result: result)
       return
     }
     if method == "app.autoLaunchStatus" {
@@ -177,6 +199,57 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
       return
     }
     result(Self.errorEnvelope(id, "unsupported_platform", "unknown method \(method)"))
+  }
+
+  private func handleRuntime(method: String, args: [String: Any], id: String, result: @escaping FlutterResult) {
+    do {
+      switch method {
+      case "group.select":
+        let group = args["group"] as? String ?? ""
+        let outbound = args["outbound"] as? String ?? ""
+        let revision = Int64(args["expectedRevision"] as? Int ?? 0)
+        let answer = try runtime.select(group: group, outbound: outbound, expectedRevision: revision)
+        result(Self.okEnvelope(id: id, result: answer))
+      case "group.urlTest":
+        guard let outbound = args["outbound"] as? String, !outbound.isEmpty else {
+          result(Self.errorEnvelope(id, "unsupported_platform", "urlTest requires an outbound"))
+          return
+        }
+        try runtime.urlTest(outbound: outbound)
+        result(Self.okEnvelope(id: id, result: ["accepted": true]))
+      case "group.urlTestCancel":
+        result(Self.okEnvelope(id: id, result: ["accepted": true]))
+      case "group.setExpand":
+        let group = args["group"] as? String ?? ""
+        let expanded = args["expanded"] as? Bool ?? false
+        try runtime.setGroupExpand(group: group, expanded: expanded)
+        result(Self.okEnvelope(id: id, result: ["accepted": true]))
+      case "mode.set":
+        guard let mode = args["mode"] as? String, !mode.isEmpty else {
+          result(Self.errorEnvelope(id, "invalid_argument", "mode is required"))
+          return
+        }
+        try runtime.setMode(mode)
+        result(Self.okEnvelope(id: id, result: ["accepted": true, "mode": mode]))
+      case "logs.clear":
+        try runtime.clearLogs()
+        result(Self.okEnvelope(id: id, result: ["accepted": true]))
+      case "connections.close":
+        guard let connectionId = args["id"] as? String, !connectionId.isEmpty else {
+          result(Self.errorEnvelope(id, "invalid_argument", "connection id is required"))
+          return
+        }
+        try runtime.closeConnection(id: connectionId)
+        result(Self.okEnvelope(id: id, result: ["accepted": true]))
+      case "connections.closeAll":
+        try runtime.closeAllConnections()
+        result(Self.okEnvelope(id: id, result: ["accepted": true]))
+      default:
+        result(Self.errorEnvelope(id, "unsupported_platform", "unknown runtime method \(method)"))
+      }
+    } catch {
+      result(Self.errorEnvelope(id, "core_unavailable", error.localizedDescription))
+    }
   }
 
   private func startTunnel(args: [String: Any], id: String, result: @escaping FlutterResult) {
@@ -212,6 +285,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
         try await manager.loadFromPreferences()
         try manager.connection.startVPNTunnel(options: ["configContent": config as NSObject])
         self.manager = manager
+        self.runtime.start()
         result(Self.okEnvelope(id: id, result: [
           "accepted": true,
           "revision": args["revision"] ?? 0,

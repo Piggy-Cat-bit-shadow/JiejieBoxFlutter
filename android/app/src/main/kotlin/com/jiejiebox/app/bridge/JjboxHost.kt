@@ -61,6 +61,7 @@ class JjboxHost(
             ok(JSONObject())
         }
         "host.shutdown" -> {
+            JjboxRuntime.stop()
             if (activeMode == "vpn") {
                 context.startService(JjboxVpnService.intent(context, JjboxVpnService.ACTION_STOP))
             }
@@ -83,7 +84,45 @@ class JjboxHost(
         "profile.write" -> profileWrite(args)
         "profile.delete" -> profileDelete(args)
         "profile.apply" -> profileApply(args)
-        "provider.refresh" -> coreCall { JjboxCore.refreshProviders(args.optString("tags")) }
+        "provider.refresh" -> runtimeRefresh(args)
+        "events.poll" -> ok(runtimeEvent())
+        "group.select" -> runtimeCommand {
+            JjboxRuntime.select(
+                args.optString("group"),
+                args.optString("outbound"),
+                args.optLong("expectedRevision", 0),
+            )
+        }
+        "group.urlTest" -> {
+            if (JjboxCore.isLoaded) {
+                error("unsupported_platform", "urlTest requires a running command client", false)
+            } else {
+                error("unsupported_platform", "libbox is not linked into this build", false)
+            }
+        }
+        "group.urlTestCancel" -> ok(JSONObject().put("accepted", true))
+        "group.setExpand" -> runtimeCommand {
+            JjboxRuntime.setGroupExpand(args.optString("group"), args.optBoolean("expanded", false))
+            JSONObject().put("accepted", true)
+        }
+        "mode.set" -> runtimeCommand {
+            val mode = args.optString("mode")
+            if (mode.isBlank()) throw IllegalArgumentException("mode is required")
+            JjboxRuntime.setMode(mode)
+            JSONObject().put("accepted", true).put("mode", mode)
+        }
+        "logs.clear" -> runtimeCommand {
+            JjboxRuntime.clearLogs()
+            JSONObject().put("accepted", true)
+        }
+        "connections.close" -> runtimeCommand {
+            JjboxRuntime.closeConnection(args.optString("id"))
+            JSONObject().put("accepted", true)
+        }
+        "connections.closeAll" -> runtimeCommand {
+            JjboxRuntime.closeAllConnections()
+            JSONObject().put("accepted", true)
+        }
         "systemProxy.apply", "systemProxy.status" ->
             error("unsupported_platform", "the system proxy is a desktop capability", false)
         "tun.requestPermission" -> ok(
@@ -161,6 +200,7 @@ class JjboxHost(
                 JjboxCore.stopService()
                 return error("closed", "host is shutting down", false)
             }
+            JjboxRuntime.start()
             lifetime.runtimeReport(true, revision)
             activeId = profile.id
             activeRevision = profile.revision
@@ -187,6 +227,7 @@ class JjboxHost(
             if (activeMode == "vpn") {
                 context.startService(JjboxVpnService.intent(context, JjboxVpnService.ACTION_STOP))
             }
+            JjboxRuntime.stop()
             JjboxCore.stopService()
             lifetime.runtimeReport(false, revision)
             emit(stateEvent())
@@ -195,6 +236,47 @@ class JjboxHost(
             lifetime.failPending(failure.message ?: "stop failed")
             if (failure is CoreException) error(failure.code, failure.message, true)
             else error("core_stop_failed", failure.message ?: "core stop failed", true)
+        }
+    }
+
+    private fun runtimeEvent(): JSONObject {
+        val event = JjboxRuntime.poll() ?: return JSONObject()
+        val encoded = android.util.Base64.encodeToString(
+            event.toByteArray(Charsets.UTF_8),
+            android.util.Base64.NO_WRAP,
+        )
+        return JSONObject().put("event", encoded)
+    }
+
+    private fun runtimeRefresh(args: JSONObject): JSONObject {
+        if (!JjboxCore.isLoaded) {
+            return ok(
+                JSONObject()
+                    .put("supported", false)
+                    .put("refreshed", JSONArray())
+                    .put("failed", JSONObject())
+                    .put("durationMillis", 0),
+            )
+        }
+        val tags = mutableListOf<String>()
+        args.optJSONArray("tags")?.let { array ->
+            for (index in 0 until array.length()) {
+                val tag = array.optString(index)
+                if (tag.isNotEmpty()) tags.add(tag)
+            }
+        }
+        return runtimeCommand {
+            JjboxRuntime.refreshProviders(tags, args.optLong("timeoutMillis", 60_000))
+        }
+    }
+
+    private fun runtimeCommand(block: () -> JSONObject): JSONObject {
+        return try {
+            ok(block())
+        } catch (failure: CoreException) {
+            error(failure.code, failure.message, true)
+        } catch (failure: Exception) {
+            error("core_unavailable", failure.message ?: "runtime call failed", true)
         }
     }
 
@@ -237,6 +319,9 @@ class JjboxHost(
 
     private fun capabilities(): JSONObject = JSONObject()
         .put("core", JjboxCore.isLoaded)
+        .put("events", JjboxCore.isLoaded)
+        .put("runtime", JjboxCore.isLoaded)
+        .put("hostEpoch", JjboxRuntime.hostEpoch)
         .put("tun", JjboxCore.isLoaded)
         .put("systemProxy", false)
         .put("perAppProxy", false)

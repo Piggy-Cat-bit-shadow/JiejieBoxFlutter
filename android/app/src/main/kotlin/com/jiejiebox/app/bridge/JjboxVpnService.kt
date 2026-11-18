@@ -108,6 +108,7 @@ class JjboxVpnService : VpnService() {
 
     private fun stopTun() {
         if (established) {
+            JjboxRuntime.stop()
             runCatching { JjboxCore.stopService() }
             JjboxCore.clearTun()
             established = false

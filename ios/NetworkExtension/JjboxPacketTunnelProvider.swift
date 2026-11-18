@@ -119,9 +119,13 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
   // MARK: - Networking
 
   private static func supportDirectory() -> String {
-    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    // The app process connects a CommandClient to this socket, so base path must be
+    // the shared App Group container rather than the extension's own container.
+    let base = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: "group.com.jiejiebox.app"
+    ) ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
       ?? URL(fileURLWithPath: NSTemporaryDirectory())
-    let dir = base.appendingPathComponent("JiejieBox/network-extension", isDirectory: true)
+    let dir = base.appendingPathComponent("JiejieBox/core", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir.path
   }
