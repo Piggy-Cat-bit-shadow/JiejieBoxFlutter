@@ -41,11 +41,11 @@ targets:
         script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" embed_and_thin
         basedOnDependencyAnalysis: false
     dependencies:
-      - target: NetworkExtension
+      - target: JjboxTunnel
         embed: true
       - framework: Frameworks/Libbox.xcframework
         embed: false
-  NetworkExtension:
+  JjboxTunnel:
     type: app-extension
     platform: iOS
     sources:
