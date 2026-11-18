@@ -17,8 +17,9 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
   private let lock = NSLock()
 
   override func startTunnel(options: [String: NSObject]?) async throws {
-    let content = (options?["configContent"] as? String)
-      ?? (protocolConfiguration.providerConfiguration?["configContent"] as? String)
+    let provider = protocolConfiguration as? NETunnelProviderProtocol
+    let content: String? = (options?["configContent"] as? String)
+      ?? (provider?.providerConfiguration?["configContent"] as? String)
     guard let content, !content.isEmpty else {
       throw NSError(
         domain: "JiejieBox",
@@ -67,11 +68,10 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
     lock.lock()
     running = false
     lock.unlock()
-    commandServer?.closeService()
-    commandServer?.close()
+    try? commandServer?.closeService()
+    try? commandServer?.close()
     commandServer = nil
-    networkSettings = nil
-  }
+    networkSettings = nil  }
 
   override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
     guard let object = try? JSONSerialization.jsonObject(with: messageData) as? [String: Any],
@@ -83,7 +83,7 @@ final class JjboxPacketTunnelProvider: NEPacketTunnelProvider {
     let args = object["args"] as? [String: Any] ?? [:]
     switch method {
     case "service.stop":
-      commandServer?.closeService()
+      try? commandServer?.closeService()
       running = false
       completionHandler?(Self.okEnvelope(id: id, result: ["accepted": true]))
     case "service.status":
