@@ -50,6 +50,7 @@ abstract final class BridgeMethod {
   static const String filePickConfig = 'file.pickConfig';
   static const String clipboardReadCandidate = 'clipboard.readCandidate';
   static const String appSetAutoLaunch = 'app.setAutoLaunch';
+  static const String appAutoLaunchStatus = 'app.autoLaunchStatus';
   static const String trayUpdate = 'tray.update';
 
   static const List<String> all = <String>[
@@ -77,6 +78,7 @@ abstract final class BridgeMethod {
     filePickConfig,
     clipboardReadCandidate,
     appSetAutoLaunch,
+    appAutoLaunchStatus,
     trayUpdate,
   ];
 }
@@ -739,8 +741,12 @@ class HostBridge {
     return json['applied'] as bool? ?? false;
   }
 
-  Future<SystemProxyStatus> systemProxyStatus() async =>
-      SystemProxyStatus.fromJson(await invoke(BridgeMethod.systemProxyStatus));
+  Future<SystemProxyStatus> systemProxyStatus({int port = 0}) async =>
+      SystemProxyStatus.fromJson(
+        await invoke(BridgeMethod.systemProxyStatus, <String, Object?>{
+          'port': port,
+        }),
+      );
 
   Future<PermissionResult> requestTunPermission() async =>
       PermissionResult.fromJson(
@@ -782,6 +788,13 @@ class HostBridge {
     final Map<String, Object?> json = await invoke(
       BridgeMethod.appSetAutoLaunch,
       <String, Object?>{'enabled': enabled},
+    );
+    return json['enabled'] as bool? ?? false;
+  }
+
+  Future<bool> autoLaunchStatus() async {
+    final Map<String, Object?> json = await invoke(
+      BridgeMethod.appAutoLaunchStatus,
     );
     return json['enabled'] as bool? ?? false;
   }

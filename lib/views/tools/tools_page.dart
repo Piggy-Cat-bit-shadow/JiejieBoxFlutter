@@ -84,6 +84,38 @@ class ToolsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          if (state.canSystemProxy || state.canAutostart || state.canTray)
+            Card(
+              child: Column(
+                children: [
+                  if (state.canSystemProxy)
+                    ListItem(
+                      title: Text(l10n.systemProxy),
+                      trailing: Text(
+                        state.systemProxyEnabled ? l10n.enabled : l10n.disabled,
+                        style: trailingStyle,
+                      ),
+                      onTap: () =>
+                          state.setSystemProxy(!state.systemProxyEnabled),
+                    ),
+                  if (state.canAutostart)
+                    ListItem(
+                      title: Text(l10n.autoLaunch),
+                      trailing: Text(
+                        state.autostartEnabled ? l10n.enabled : l10n.disabled,
+                        style: trailingStyle,
+                      ),
+                      onTap: () => state.setAutostart(!state.autostartEnabled),
+                    ),
+                  if (state.canTray)
+                    ListItem(
+                      title: const Text('Tray icon'),
+                      trailing: Text('Active', style: trailingStyle),
+                    ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 16),
           Card(
             child: ListItem(
               leading: const GlyphIcon(AppGlyphs.cloudDownload),

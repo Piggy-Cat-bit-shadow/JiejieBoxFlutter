@@ -10,7 +10,31 @@ import Foundation
 /// plugin forwards every host method to the helper socket when it is present; the
 /// local answers below are the honest fallback when the helper is not installed.
 final class JjboxMacHostPlugin: NSObject, FlutterPlugin {
-  private let helper = HelperSocketClient()
+  private let helperProcess: HelperProcess
+  private let helper: HelperSocketClient
+
+  override init() {
+    let process = HelperProcess()
+    helperProcess = process
+    helper = HelperSocketClient(socketPath: process.socketPath)
+    super.init()
+    process.start()
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(applicationWillTerminate),
+      name: NSApplication.willTerminateNotification,
+      object: nil
+    )
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+    helperProcess.stop()
+  }
+
+  @objc private func applicationWillTerminate() {
+    helperProcess.stop()
+  }
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -35,9 +59,20 @@ final class JjboxMacHostPlugin: NSObject, FlutterPlugin {
     }
 
     let id = Self.sniff(payload, key: "id")
-    if payload.contains("\"host.capabilities\"") || payload.contains("\"core.capabilities\"") {
+    let isCapabilities = payload.contains("\"host.capabilities\"") ||
+      payload.contains("\"core.capabilities\"")
+    if isCapabilities {
       if let reply = helper.request(payload) {
         result(reply)
+      } else if helperProcess.hasHelper {
+        // A bundled helper is starting. Returning the local core:false answer
+        // here would be cached by the one-shot runtime probe forever, so make
+        // the probe retry instead.
+        result(Self.localError(
+          id: id,
+          code: "transport_disconnected",
+          message: "the macOS core helper is starting"
+        ))
       } else {
         result(Self.localEnvelope(id: id, result: Self.localCapabilities(payload)))
       }
@@ -53,13 +88,13 @@ final class JjboxMacHostPlugin: NSObject, FlutterPlugin {
       result(Self.localError(
         id: id,
         code: "core_unavailable",
-        message: "the macOS helper is not installed; no kernel is linked in the app process"
+        message: "the macOS helper is not reachable"
       ))
     } else {
-      result(FlutterError(
+      result(Self.localError(
+        id: id,
         code: "transport_disconnected",
-        message: "the macOS helper socket is not reachable",
-        details: nil
+        message: "the macOS helper socket is not reachable"
       ))
     }
   }
@@ -148,12 +183,90 @@ final class JjboxMacHostPlugin: NSObject, FlutterPlugin {
   }
 }
 
+/// Owns the bundled Go helper that links libbox. The helper is proxy-only (no
+/// root/TUN), and the app must not silently pretend it is present when the
+/// bundle is missing.
+final class HelperProcess {
+  let socketPath: String
+  private let executable: URL?
+  private var process: Process?
+  private(set) var failed = false
+
+  var hasHelper: Bool { executable != nil }
+
+  init() {
+    let environment = ProcessInfo.processInfo.environment
+    if let external = environment["JJBOX_HELPER_SOCKET"], !external.isEmpty {
+      socketPath = external
+      executable = nil
+      return
+    }
+    let support = FileManager.default.urls(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask
+    ).first?.appendingPathComponent("JiejieBox/host", isDirectory: true)
+    try? FileManager.default.createDirectory(
+      at: support ?? URL(fileURLWithPath: NSTemporaryDirectory()),
+      withIntermediateDirectories: true
+    )
+    let bundled = Bundle.main.bundleURL
+      .appendingPathComponent("Contents/Helpers/jjbox-core-helper")
+      .path
+    let configured = environment["JJBOX_HELPER_EXE"] ?? ""
+    let candidate = configured.isEmpty ? bundled : configured
+    if FileManager.default.isExecutableFile(atPath: candidate) {
+      executable = URL(fileURLWithPath: candidate)
+    } else {
+      executable = nil
+    }
+    socketPath = (NSTemporaryDirectory() as NSString)
+      .appendingPathComponent("jjbox-\(getpid()).sock")
+  }
+
+  func start() {
+    guard let executable, process == nil else { return }
+    let data = FileManager.default.urls(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask
+    ).first?.appendingPathComponent("JiejieBox/host", isDirectory: true)
+      ?? URL(fileURLWithPath: NSTemporaryDirectory())
+    try? FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+    let task = Process()
+    task.executableURL = executable
+    task.arguments = [
+      "--socket", socketPath,
+      "--data", data.path,
+      "--parent-pid", String(getpid()),
+    ]
+    task.standardOutput = Pipe()
+    task.standardError = Pipe()
+    task.terminationHandler = { [weak self] _ in
+      self?.failed = true
+    }
+    do {
+      try task.run()
+      process = task
+    } catch {
+      failed = true
+    }
+  }
+
+  func stop() {
+    process?.terminate()
+    process = nil
+  }
+}
+
 /// Line-delimited JSON over a Unix domain socket. The helper protocol is the same
 /// envelope the Windows host uses; only the transport differs.
 final class HelperSocketClient {
   private let socketPath: String
 
-  init() {
+  init(socketPath: String? = nil) {
+    if let socketPath, !socketPath.isEmpty {
+      self.socketPath = socketPath
+      return
+    }
     let environment = ProcessInfo.processInfo.environment["JJBOX_HELPER_SOCKET"]
     if let environment, !environment.isEmpty {
       socketPath = environment
@@ -166,7 +279,7 @@ final class HelperSocketClient {
     }
   }
 
-  func request(_ envelope: String, timeout: TimeInterval = 10) -> String? {
+  func request(_ envelope: String, timeout: TimeInterval = 20) -> String? {
     let fd = socket(AF_UNIX, SOCK_STREAM, 0)
     guard fd >= 0 else { return nil }
     defer { close(fd) }

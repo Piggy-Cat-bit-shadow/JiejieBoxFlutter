@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -59,9 +60,14 @@ func TestCapabilitiesDoNotClaimDeadWindowsFeatures(t *testing.T) {
 		t.Fatalf("capabilities: %+v", response.Error)
 	}
 	caps := response.Result.(map[string]any)
-	for _, key := range []string{"systemProxy", "autostart", "tray", "notifications", "deepLink", "events", "tun"} {
+	for _, key := range []string{"notifications", "deepLink", "tun"} {
 		if caps[key] != false {
 			t.Errorf("%s must be false until implemented, got %v", key, caps[key])
+		}
+	}
+	for _, key := range []string{"systemProxy", "autostart", "tray", "events"} {
+		if caps[key] != true {
+			t.Errorf("%s must be true after wiring, got %v", key, caps[key])
 		}
 	}
 	modes, _ := caps["serviceModes"].([]string)
@@ -309,13 +315,19 @@ func TestProfileApplyFailureRollsBackLastGood(t *testing.T) {
 	}
 }
 
-func TestSystemIntegrationIsDisabled(t *testing.T) {
+func TestSystemIntegrationCommandsAreImplemented(t *testing.T) {
 	server := newTestServer(t)
-	for _, method := range []string{"systemProxy.apply", "systemProxy.status", "app.setAutoLaunch", "tray.update"} {
+	for _, method := range []string{"systemProxy.status", "tray.update"} {
 		response := server.Handle(request{ID: method, Method: method})
-		if response.OK || response.Error.Code != "unsupported_platform" {
-			t.Errorf("%s must be unsupported, got %+v", method, response)
+		if !response.OK {
+			t.Errorf("%s must be implemented, got %+v", method, response)
 		}
+	}
+	// Disabling when no proxy was applied must be a no-op, not an error and not
+	// a write to the user's WinINet setting.
+	response := server.Handle(request{ID: "proxy-off", Method: "systemProxy.apply", Args: map[string]any{"enabled": false}})
+	if !response.OK {
+		t.Errorf("systemProxy.apply(false) must be a safe no-op, got %+v", response)
 	}
 }
 
@@ -402,6 +414,38 @@ func TestEventsAreQueuedForTheCaller(t *testing.T) {
 	}
 	if server.takeEvents() != nil {
 		t.Fatal("events must be drained once")
+	}
+}
+
+func TestEventsPollReturnsOneCallbackEnvelope(t *testing.T) {
+	server, _ := newFakeServer(t)
+	id, revision := writeProfile(t, server, validProxy)
+	if response := startProfile(server, 1, id, revision); !response.OK {
+		t.Fatalf("start: %+v", response.Error)
+	}
+	response := server.Handle(request{ID: "poll", Method: "events.poll"})
+	if !response.OK {
+		t.Fatalf("events.poll: %+v", response.Error)
+	}
+	result := response.Result.(map[string]any)
+	encoded, ok := result["event"].(string)
+	if !ok || encoded == "" {
+		t.Fatalf("events.poll returned no event: %+v", result)
+	}
+	decoded, err := decodeBase64(encoded)
+	if err != nil {
+		t.Fatalf("event is not base64: %v", err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(decoded, &envelope); err != nil {
+		t.Fatalf("event is not JSON: %v", err)
+	}
+	if envelope["type"] != "service.state" {
+		t.Fatalf("unexpected event %+v", envelope)
+	}
+	empty := server.Handle(request{ID: "poll2", Method: "events.poll"})
+	if empty.Result.(map[string]any)["event"] != nil {
+		t.Fatalf("events must be drained one at a time: %+v", empty.Result)
 	}
 }
 

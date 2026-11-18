@@ -46,6 +46,7 @@ class CoreConnection extends ChangeNotifier {
   String? _reason;
   int _revision = 0;
   jb.RuntimeStatus? _status;
+  jb.HostCapabilities? _capabilities;
   StreamSubscription<({jb.HostCallback callback, bool gap})>? _events;
   Timer? _poll;
   bool _disposed = false;
@@ -54,6 +55,7 @@ class CoreConnection extends ChangeNotifier {
   String? get reason => _reason;
   int get revision => _revision;
   jb.RuntimeStatus? get runtimeStatus => _status;
+  jb.HostCapabilities? get capabilities => _capabilities;
 
   bool get isAvailable => _state != CoreServiceState.unavailable;
 
@@ -62,6 +64,7 @@ class CoreConnection extends ChangeNotifier {
   void _listen() {
     final bridge = host;
     if (bridge == null) return;
+    unawaited(refreshCapabilities());
     _events = bridge.events.listen((event) {
       final type = event.callback.type;
       if (type.startsWith('service.') || event.gap) {
@@ -103,6 +106,18 @@ class CoreConnection extends ChangeNotifier {
     _set(_mapState(status.state), reason: status.lastError?.message);
   }
 
+  Future<void> refreshCapabilities() async {
+    final bridge = host;
+    if (bridge == null) return;
+    try {
+      _capabilities = await bridge.capabilities();
+      notifyListeners();
+    } on Object {
+      // The availability probe remains the authority; a transient capability
+      // query failure must not turn a reachable host into unavailable.
+    }
+  }
+
   Future<void> refresh() async {
     if (_disposed) return;
     final bridge = host;
@@ -141,7 +156,7 @@ class CoreConnection extends ChangeNotifier {
         _set(CoreServiceState.failed, reason: 'no profile selected');
         return false;
       }
-      final String resolvedMode = mode ?? _defaultServiceMode();
+      final String resolvedMode = mode ?? await _modeForHost(bridge);
       _set(CoreServiceState.starting);
       try {
         final ack = await bridge.start(
@@ -274,6 +289,36 @@ class CoreConnection extends ChangeNotifier {
 
   Future<jb.ProviderRefreshResult> refreshProviders(List<String> tags) =>
       _requireHost().refreshProviders(tags);
+
+  Future<bool> applySystemProxy({
+    required bool enabled,
+    int port = 0,
+    List<String> bypass = const <String>[],
+  }) => _requireHost().applySystemProxy(
+    enabled: enabled,
+    port: port,
+    bypass: bypass,
+  );
+
+  Future<jb.SystemProxyStatus> systemProxyStatus({int port = 0}) =>
+      _requireHost().systemProxyStatus(port: port);
+
+  Future<bool> setAutoLaunch(bool enabled) =>
+      _requireHost().setAutoLaunch(enabled);
+
+  Future<bool> autoLaunchStatus() => _requireHost().autoLaunchStatus();
+
+  Future<void> updateTray({
+    required bool running,
+    required String mode,
+    required int proxyPort,
+    List<Map<String, Object?>> groups = const <Map<String, Object?>>[],
+  }) => _requireHost().updateTray(
+    running: running,
+    mode: mode,
+    proxyPort: proxyPort,
+    groups: groups,
+  );
 
   @override
   void dispose() {

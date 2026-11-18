@@ -1,0 +1,99 @@
+name: macos-helper
+
+# Builds the real proxy core helper (Go + libbox) and a signed-for-testing
+# macOS app that bundles it. This is a test artifact, not notarized distribution.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/p7-final
+    paths:
+      - '.github/workflows/macos-helper.yml'
+      - 'macos/**'
+      - 'windows/core_host/**'
+      - 'tools/build_macos_helper.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: macOS helper + app
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      KERNEL_REPO: Piggy-Cat-bit-shadow/JiejieBox
+      KERNEL_REF: 29210fa66dc154f5f1573b08c5046d935406cfe7
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Checkout kernel
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KERNEL_REPO }}
+          ref: ${{ env.KERNEL_REF }}
+          path: kernel
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache: false
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.6'
+          cache: true
+
+      - name: Build helper
+        run: |
+          chmod +x tools/build_macos_helper.sh
+          tools/build_macos_helper.sh "$GITHUB_WORKSPACE/kernel" \
+            "$GITHUB_WORKSPACE/build/macos_helper/jjbox-core-helper" arm64
+
+      - name: Helper selftest
+        run: |
+          helper="$GITHUB_WORKSPACE/build/macos_helper/jjbox-core-helper"
+          "$helper" --selftest --data "$RUNNER_TEMP/jjbox-helper-data"
+          file "$helper"
+
+      - name: Build macOS app
+        run: |
+          flutter pub get
+          flutter build macos --release
+
+      - name: Bundle helper and ad-hoc sign
+        run: |
+          set -euo pipefail
+          app="build/macos/Build/Products/Release/JiejieBox.app"
+          test -d "$app"
+          mkdir -p "$app/Contents/Helpers"
+          cp build/macos_helper/jjbox-core-helper \
+            "$app/Contents/Helpers/jjbox-core-helper"
+          codesign --force --sign - --timestamp=none \
+            --entitlements macos/Runner/Helper.entitlements \
+            "$app/Contents/Helpers/jjbox-core-helper"
+          codesign --force --sign - --timestamp=none \
+            --entitlements macos/Runner/Release.entitlements \
+            "$app"
+          codesign --verify --strict --verbose=2 "$app"
+          codesign --verify --strict --verbose=2 \
+            "$app/Contents/Helpers/jjbox-core-helper"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$app" "build/JiejieBox-macos-unsigned.zip"
+          shasum -a 256 "build/JiejieBox-macos-unsigned.zip" \
+            | tee build/SHA256SUMS-macos.txt
+          ls -lh "$app/Contents/Helpers/jjbox-core-helper"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JiejieBox-macos-helper
+          path: |
+            build/JiejieBox-macos-unsigned.zip
+            build/SHA256SUMS-macos.txt
+          if-no-files-found: error
+          retention-days: 14

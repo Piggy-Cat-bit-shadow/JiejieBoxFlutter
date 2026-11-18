@@ -65,6 +65,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     JjboxPluginDrainCompletions();
     return 0;
   }
+  if (message == kJjboxPluginEventMessage) {
+    JjboxPluginDrainEvents();
+    return 0;
+  }
 
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {

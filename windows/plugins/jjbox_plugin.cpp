@@ -1,7 +1,6 @@
 // The Flutter Windows end of `jjbox/host`. It is a transport, not a policy layer:
-// the JSON envelope goes to the Go host process byte for byte. The host is
-// request/response only (host.capabilities.events is false), so this plugin does
-// not pretend to deliver asynchronous callbacks.
+// the JSON envelope goes to the Go host process byte for byte. A small callback
+// pump polls `events.poll` and forwards each host event to `jjbox/host/callback`.
 //
 // The pipe name is read from JJBOX_HOST_PIPE so a debug build can point at a
 // per-user pipe without rebuilding; production uses \\.\pipe\jjbox-host, created
@@ -11,6 +10,9 @@
 #include "jjbox_protocol.h"
 
 #include <windows.h>
+#include <shellapi.h>
+
+#pragma comment(lib, "shell32.lib")
 
 #include <bcrypt.h>
 
@@ -25,7 +27,10 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <cwchar>
 #include <fstream>
 #include <functional>
 #include <memory>
@@ -89,6 +94,31 @@ std::string SniffString(const std::string& payload, const std::string& key) {
   return payload.substr(valueStart, end - valueStart);
 }
 
+bool SniffBool(const std::string& payload, const std::string& key) {
+  return payload.find("\"" + key + "\":true") != std::string::npos;
+}
+
+int SniffInt(const std::string& payload, const std::string& key, int fallback = 0) {
+  const std::string needle = "\"" + key + "\":";
+  const size_t start = payload.find(needle);
+  if (start == std::string::npos) return fallback;
+  size_t cursor = start + needle.size();
+  bool negative = false;
+  if (cursor < payload.size() && payload[cursor] == '-') {
+    negative = true;
+    cursor++;
+  }
+  int value = 0;
+  bool any = false;
+  while (cursor < payload.size() && payload[cursor] >= '0' && payload[cursor] <= '9') {
+    any = true;
+    value = value * 10 + (payload[cursor] - '0');
+    cursor++;
+  }
+  if (!any) return fallback;
+  return negative ? -value : value;
+}
+
 std::string JsonEscape(const std::string& value) {
   std::string out;
   out.reserve(value.size() + 8);
@@ -144,6 +174,33 @@ std::string Base64Encode(const std::vector<unsigned char>& data) {
     out += "=";
   }
   return out;
+}
+
+std::string Base64Decode(const std::string& text) {
+  auto value_of = [](char c) -> int {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+  };
+  std::vector<unsigned char> out;
+  out.reserve((text.size() / 4) * 3);
+  int accumulator = 0;
+  int bits = 0;
+  for (char c : text) {
+    if (c == '=') break;
+    const int value = value_of(c);
+    if (value < 0) continue;
+    accumulator = (accumulator << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push_back(static_cast<unsigned char>((accumulator >> bits) & 0xFF));
+    }
+  }
+  return std::string(out.begin(), out.end());
 }
 
 std::string Sha256Hex(const std::vector<unsigned char>& data) {
@@ -384,9 +441,18 @@ class JjboxPlugin : public flutter::Plugin {
     }
     if (view_handle_ != nullptr) {
       window_proc_delegate_id_ = registrar_->RegisterTopLevelWindowProcDelegate(
-          [this](HWND, UINT message, WPARAM, LPARAM) -> std::optional<LRESULT> {
+          [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+              -> std::optional<LRESULT> {
             if (message == kJjboxPluginCompletionMessage) {
               DrainCompletions();
+              return 0;
+            }
+            if (message == kJjboxPluginEventMessage) {
+              DrainEvents();
+              return 0;
+            }
+            if (message == kJjboxPluginTrayMessage) {
+              HandleTrayMessage(hwnd, lparam);
               return 0;
             }
             return std::nullopt;
@@ -403,6 +469,7 @@ class JjboxPlugin : public flutter::Plugin {
     callbacks_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
         registrar->messenger(), jjbox::kCallbacksChannel,
         &flutter::StandardMethodCodec::GetInstance());
+    event_thread_ = std::thread([this] { EventPumpLoop(); });
   }
 
   ~JjboxPlugin() override {
@@ -410,6 +477,13 @@ class JjboxPlugin : public flutter::Plugin {
       std::lock_guard<std::mutex> guard(completion_mutex_);
       shutting_down_ = true;
     }
+    {
+      std::lock_guard<std::mutex> guard(event_mutex_);
+      event_stop_ = true;
+    }
+    event_cv_.notify_all();
+    if (event_thread_.joinable()) event_thread_.join();
+    RemoveTray();
     if (link_) link_->Close();
     {
       std::unique_lock<std::mutex> lock(completion_mutex_);
@@ -422,7 +496,7 @@ class JjboxPlugin : public flutter::Plugin {
   }
 
   void DrainFromPlatformThread() { DrainCompletions(); }
-
+  void DrainEventsFromPlatformThread() { DrainEvents(); }
  private:
   struct Completion {
     std::unique_ptr<flutter::MethodResult<EncodableValue>> result;
@@ -461,6 +535,11 @@ class JjboxPlugin : public flutter::Plugin {
           id, "{\"name\":\"" + JsonEscape(Utf8FromWide(picked.name)) +
                   "\",\"content\":\"" + Base64Encode(picked.bytes) +
                   "\",\"sha256\":\"" + Sha256Hex(picked.bytes) + "\"}")));
+      return;
+    }
+    if (method == "tray.update") {
+      UpdateTray(*payload);
+      result->Success(EncodableValue(OkEnvelope(id, "{\"updated\":true}")));
       return;
     }
 
@@ -505,6 +584,97 @@ class JjboxPlugin : public flutter::Plugin {
     }).detach();
   }
 
+  void UpdateTray(const std::string& payload) {
+    if (view_handle_ == nullptr) return;
+    HWND hwnd = GetAncestor(view_handle_, GA_ROOT);
+    if (hwnd == nullptr) return;
+    tray_running_ = SniffBool(payload, "running");
+    const int port = SniffInt(payload, "proxyPort", 0);
+    const std::string mode = SniffString(payload, "mode");
+    std::wstring tooltip = tray_running_ ? L"JiejieBox - running" : L"JiejieBox - stopped";
+    if (port > 0 && tray_running_) {
+      tooltip += L" (";
+      tooltip += std::to_wstring(port);
+      tooltip += L")";
+    }
+    if (!mode.empty() && tray_running_) {
+      tooltip += L" [" + std::wstring(mode.begin(), mode.end()) + L"]";
+    }
+    tray_tooltip_ = tooltip;
+    if (tray_added_) {
+      NOTIFYICONDATAW data = {};
+      data.cbSize = sizeof(data);
+      data.hWnd = hwnd;
+      data.uID = 1;
+      wcsncpy_s(data.szTip, tray_tooltip_.c_str(), _TRUNCATE);
+      Shell_NotifyIconW(NIM_MODIFY, &data);
+      return;
+    }
+    tray_hwnd_ = hwnd;
+    NOTIFYICONDATAW data = {};
+    data.cbSize = sizeof(data);
+    data.hWnd = hwnd;
+    data.uID = 1;
+    data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    data.uCallbackMessage = kJjboxPluginTrayMessage;
+    data.hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(101));
+    if (data.hIcon == nullptr) data.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    wcsncpy_s(data.szTip, tray_tooltip_.c_str(), _TRUNCATE);
+    if (Shell_NotifyIconW(NIM_ADD, &data)) {
+      tray_added_ = true;
+      DebugLog("tray added hwnd=" +
+               std::to_string(reinterpret_cast<uintptr_t>(hwnd)));
+      NOTIFYICONDATAW version = {};
+      version.cbSize = sizeof(version);
+      version.hWnd = hwnd;
+      version.uID = 1;
+      version.uVersion = NOTIFYICON_VERSION_4;
+      Shell_NotifyIconW(NIM_SETVERSION, &version);
+    }
+  }
+
+  void RemoveTray() {
+    if (!tray_added_ || tray_hwnd_ == nullptr) return;
+    NOTIFYICONDATAW data = {};
+    data.cbSize = sizeof(data);
+    data.hWnd = tray_hwnd_;
+    data.uID = 1;
+    Shell_NotifyIconW(NIM_DELETE, &data);
+    tray_added_ = false;
+  }
+
+  void HandleTrayMessage(HWND hwnd, LPARAM event) {
+    // NOTIFYICON_VERSION_4 reports the event in the low word of lParam.
+    const UINT message = LOWORD(event);
+    if (message == WM_LBUTTONUP || message == NIN_SELECT) {
+      ShowWindow(hwnd, SW_SHOW);
+      SetForegroundWindow(hwnd);
+      return;
+    }
+    if (message != WM_RBUTTONUP && message != WM_CONTEXTMENU) return;
+    HMENU menu = CreatePopupMenu();
+    if (menu == nullptr) return;
+    AppendMenuW(menu, MF_STRING, 1, L"Show JiejieBox");
+    AppendMenuW(menu, MF_STRING, 2, L"Hide to tray");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, 3, L"Quit");
+    POINT cursor = {};
+    GetCursorPos(&cursor);
+    SetForegroundWindow(hwnd);
+    const int command = TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, cursor.x,
+        cursor.y, 0, hwnd, nullptr);
+    DestroyMenu(menu);
+    if (command == 1) {
+      ShowWindow(hwnd, SW_SHOW);
+      SetForegroundWindow(hwnd);
+    } else if (command == 2) {
+      ShowWindow(hwnd, SW_HIDE);
+    } else if (command == 3) {
+      PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    }
+  }
+
   void DrainCompletions() {
     std::vector<std::unique_ptr<Completion>> ready;
     {
@@ -522,6 +692,59 @@ class JjboxPlugin : public flutter::Plugin {
     }
   }
 
+  // Runs off the platform thread. Polling one event at a time keeps the C++
+  // side free of a JSON parser: the host returns the exact callback envelope as
+  // a base64 string and Flutter's channel codec parses it on the Dart side.
+  void EventPumpLoop() {
+    uint64_t counter = 0;
+    for (;;) {
+      {
+        std::unique_lock<std::mutex> lock(event_mutex_);
+        event_cv_.wait_for(lock, std::chrono::milliseconds(300),
+                           [this] { return event_stop_; });
+        if (event_stop_) return;
+      }
+      const std::string payload =
+          "{\"id\":\"events-" + std::to_string(++counter) +
+          "\",\"method\":\"events.poll\"}";
+      std::string response;
+      if (!link_->Send(payload, &response)) {
+        std::unique_lock<std::mutex> lock(event_mutex_);
+        event_cv_.wait_for(lock, std::chrono::milliseconds(500),
+                           [this] { return event_stop_; });
+        if (event_stop_) return;
+        continue;
+      }
+      const std::string encoded = SniffString(response, "event");
+      if (encoded.empty()) continue;
+      std::string event = Base64Decode(encoded);
+      if (event.empty()) continue;
+      {
+        std::lock_guard<std::mutex> guard(event_mutex_);
+        pending_events_.push_back(std::move(event));
+      }
+      HWND target = view_handle_ != nullptr ? GetAncestor(view_handle_, GA_ROOT)
+                                            : nullptr;
+      if (target != nullptr) {
+        PostMessageW(target, kJjboxPluginEventMessage, 0, 0);
+      }
+    }
+  }
+
+  void DrainEvents() {
+    std::vector<std::string> ready;
+    {
+      std::lock_guard<std::mutex> guard(event_mutex_);
+      ready.swap(pending_events_);
+    }
+    if (ready.empty() || !callbacks_) return;
+    DebugLog("drain events=" + std::to_string(ready.size()));
+    for (const std::string& event : ready) {
+      callbacks_->InvokeMethod(
+          "event", std::make_unique<EncodableValue>(event));
+    }
+  }
+
   flutter::PluginRegistrarWindows* registrar_;
   std::unique_ptr<HostLink> link_;
   std::unique_ptr<flutter::MethodChannel<EncodableValue>> commands_;
@@ -533,6 +756,17 @@ class JjboxPlugin : public flutter::Plugin {
   std::vector<std::unique_ptr<Completion>> completions_;
   int in_flight_ = 0;
   bool shutting_down_ = false;
+
+  std::mutex event_mutex_;
+  std::condition_variable event_cv_;
+  std::vector<std::string> pending_events_;
+  std::thread event_thread_;
+  bool event_stop_ = false;
+
+  HWND tray_hwnd_ = nullptr;
+  bool tray_added_ = false;
+  bool tray_running_ = false;
+  std::wstring tray_tooltip_;
 };
 
 }  // namespace
@@ -545,5 +779,11 @@ void JjboxPluginRegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar
 void JjboxPluginDrainCompletions() {
   if (g_plugin != nullptr) {
     g_plugin->DrainFromPlatformThread();
+  }
+}
+
+void JjboxPluginDrainEvents() {
+  if (g_plugin != nullptr) {
+    g_plugin->DrainEventsFromPlatformThread();
   }
 }

@@ -36,8 +36,15 @@ Future<void> runHostSmoke() async {
         'core': caps.core,
         'tun': caps.tun,
         'serviceModes': caps.serviceModes,
-        'events': false,
+        'events': caps.events,
+        'systemProxy': caps.systemProxy,
+        'autostart': caps.autostart,
+        'tray': caps.tray,
       };
+      final List<String> eventTypes = <String>[];
+      final sub = host.events.listen((event) {
+        eventTypes.add(event.callback.type);
+      });
       const String config =
           '{"log":{"level":"info"},"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"}}';
       final jb.ProfileWriteResult profile = await host.writeProfile(
@@ -65,13 +72,17 @@ Future<void> runHostSmoke() async {
         final bool stopped = await connection.stop();
         result['stopped'] = stopped;
         result['idleState'] = connection.state.name;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        result['eventTypes'] = eventTypes;
         result['ok'] =
             started &&
             connection.state.name == 'stopped' &&
             applied.applied &&
-            stopped;
+            stopped &&
+            eventTypes.any((type) => type == 'service.state');
       } finally {
         connection.dispose();
+        await sub.cancel();
       }
 
       // Real node-list import: the kernel parses a share link, the UI assembles

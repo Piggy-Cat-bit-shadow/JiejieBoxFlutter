@@ -31,17 +31,30 @@ func runSelfTest(server *hostServer) error {
 	if err := expect(capsResult["core"] == coreLinked, "capabilities.core must match the build"); err != nil {
 		return err
 	}
-	for _, key := range []string{"tun", "systemProxy", "autostart", "tray", "events"} {
-		if err := expect(capsResult[key] == false, "capability "+key+" must be false"); err != nil {
+	if err := expect(capsResult["tun"] == false, "capability tun must be false"); err != nil {
+		return err
+	}
+	for key, expected := range sysCapabilities() {
+		if key == "serviceModes" {
+			continue
+		}
+		if err := expect(capsResult[key] == expected, "capability "+key+" must match the platform"); err != nil {
 			return err
 		}
 	}
 	if err := expect(capsResult["qrImageDecode"] == false, "Windows must not claim QR image decoding"); err != nil {
 		return err
 	}
-	proxyApply := server.Handle(request{ID: "2", Method: "systemProxy.apply", Args: map[string]any{"enabled": true}})
-	if err := expect(!proxyApply.OK && proxyApply.Error.Code == "unsupported_platform",
-		"systemProxy.apply must be unsupported when the capability is false"); err != nil {
+	proxyStatus := server.Handle(request{ID: "2", Method: "systemProxy.status"})
+	if err := expect(proxyStatus.OK, "systemProxy.status must be implemented"); err != nil {
+		return err
+	}
+	tray := server.Handle(request{ID: "2b", Method: "tray.update"})
+	if err := expect(tray.OK, "tray.update must be implemented"); err != nil {
+		return err
+	}
+	proxyOff := server.Handle(request{ID: "2c", Method: "systemProxy.apply", Args: map[string]any{"enabled": false}})
+	if err := expect(proxyOff.OK, "systemProxy.apply(false) must be a safe no-op"); err != nil {
 		return err
 	}
 

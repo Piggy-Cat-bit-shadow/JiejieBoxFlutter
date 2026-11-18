@@ -86,6 +86,13 @@ class AppState extends ChangeNotifier {
 
   String? providerRefreshStatus;
 
+  bool systemProxyEnabled = false;
+  bool autostartEnabled = false;
+
+  bool get canSystemProxy => connection.capabilities?.systemProxy ?? false;
+  bool get canAutostart => connection.capabilities?.autostart ?? false;
+  bool get canTray => connection.capabilities?.tray ?? false;
+
   bool _bootstrapped = false;
 
   bool get isBootstrapped => _bootstrapped;
@@ -112,9 +119,11 @@ class AppState extends ChangeNotifier {
         ..clear()
         ..addAll(metas.map(_fromMeta));
       await connection.refresh();
+      await connection.refreshCapabilities();
       if (selectedProfileId == null && profiles.isNotEmpty) {
         selectedProfileId = profiles.first.id;
       }
+      await _loadDesktopState();
       lastActionError = null;
     } on jb.HostError catch (error) {
       lastActionError = error.message;
@@ -197,6 +206,7 @@ class AppState extends ChangeNotifier {
         return;
       }
       lastActionError = null;
+      await _syncTray();
       notifyListeners();
     } on jb.HostError catch (error) {
       lastActionError = error.message;
@@ -217,15 +227,92 @@ class AppState extends ChangeNotifier {
       profileRevision: profile.revision,
     );
     lastActionError = ok ? null : connection.reason;
+    await _syncTray();
     notifyListeners();
     return ok;
   }
 
   Future<bool> stopService() async {
     final ok = await connection.stop();
+    systemProxyEnabled = false;
     lastActionError = ok ? null : connection.reason;
+    await _syncTray();
     notifyListeners();
     return ok;
+  }
+
+  Future<void> _loadDesktopState() async {
+    if (!connection.hasRealHost) return;
+    try {
+      if (canSystemProxy) {
+        final status = await connection.systemProxyStatus(
+          port: connection.runtimeStatus?.proxyPort ?? 0,
+        );
+        systemProxyEnabled = status.ourProxyActive;
+        if (status.staleFromPreviousRun) {
+          // The previous process died before restoring WinINet. Restore now
+          // instead of leaving every browser pointed at a dead port.
+          await connection.applySystemProxy(enabled: false, port: 0);
+          systemProxyEnabled = false;
+        }
+      }
+      if (canAutostart) {
+        autostartEnabled = await connection.autoLaunchStatus();
+      }
+      await _syncTray();
+    } on Object {
+      // Capability queries are best-effort; a missing system integration must
+      // not stop profile/service startup.
+    }
+  }
+
+  Future<void> _syncTray() async {
+    if (!canTray) return;
+    try {
+      await connection.updateTray(
+        running: connection.state == CoreServiceState.running,
+        mode: connection.runtimeStatus?.mode ?? 'proxy',
+        proxyPort: connection.runtimeStatus?.proxyPort ?? 0,
+      );
+    } on Object {
+      // Tray is optional shell integration.
+    }
+  }
+
+  Future<void> setSystemProxy(bool enabled) async {
+    if (!canSystemProxy) return;
+    if (enabled && connection.state != CoreServiceState.running) {
+      lastActionError = 'Start the core before enabling the system proxy';
+      notifyListeners();
+      return;
+    }
+    try {
+      final ok = await connection.applySystemProxy(
+        enabled: enabled,
+        port: connection.runtimeStatus?.proxyPort ?? 0,
+        bypass: const <String>['<local>'],
+      );
+      systemProxyEnabled = enabled && ok;
+      lastActionError = ok
+          ? null
+          : enabled
+          ? 'System proxy was not enabled'
+          : 'System proxy was not disabled';
+    } on jb.HostError catch (error) {
+      lastActionError = error.message;
+    }
+    notifyListeners();
+  }
+
+  Future<void> setAutostart(bool enabled) async {
+    if (!canAutostart) return;
+    try {
+      autostartEnabled = await connection.setAutoLaunch(enabled);
+      lastActionError = null;
+    } on jb.HostError catch (error) {
+      lastActionError = error.message;
+    }
+    notifyListeners();
   }
 
   Future<void> refreshProviders() async {

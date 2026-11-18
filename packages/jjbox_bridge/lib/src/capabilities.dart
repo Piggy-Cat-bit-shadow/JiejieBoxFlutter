@@ -18,6 +18,7 @@ class HostCapabilities {
     this.clipboardWatch = false,
     this.notifications = false,
     this.deepLink = false,
+    this.events = false,
     this.memoryPressure = false,
     this.serviceModes = const <String>['vpn'],
   });
@@ -39,6 +40,7 @@ class HostCapabilities {
       clipboardWatch: flag('clipboardWatch'),
       notifications: flag('notifications'),
       deepLink: flag('deepLink'),
+      events: flag('events'),
       memoryPressure: flag('memoryPressure'),
       serviceModes: modes.whereType<String>().toList(growable: false),
     );
@@ -58,6 +60,7 @@ class HostCapabilities {
   final bool clipboardWatch;
   final bool notifications;
   final bool deepLink;
+  final bool events;
   final bool memoryPressure;
   final List<String> serviceModes;
 
@@ -78,6 +81,7 @@ class HostCapabilities {
     'clipboardWatch': clipboardWatch,
     'notifications': notifications,
     'deepLink': deepLink,
+    'events': events,
     'memoryPressure': memoryPressure,
     'serviceModes': serviceModes,
   };

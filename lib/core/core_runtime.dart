@@ -19,7 +19,13 @@ class CoreRuntime {
   bool get isReal => host != null;
 
   Future<void> dispose() async {
-    await host?.dispose();
+    if (host != null) {
+      try {
+        await host!.shutdown();
+      } on Object {
+        await host!.dispose();
+      }
+    }
     await supervisor?.stop();
   }
 }

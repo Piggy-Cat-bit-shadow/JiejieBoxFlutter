@@ -47,6 +47,8 @@ class HostSupervisor {
         dataDir.path,
         '--parent-pid',
         pid.toString(),
+        '--app-exe',
+        Platform.resolvedExecutable,
       ]);
     } on Object catch (error) {
       _log('spawn failed: $error');

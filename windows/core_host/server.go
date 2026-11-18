@@ -42,6 +42,10 @@ type hostServer struct {
 	opMu   sync.Mutex
 	active appliedProfile
 	mode   string
+	// appExe is the Flutter executable, supplied by the supervisor. It is the
+	// autostart target; os.Executable() would point at the host instead.
+	appExe       string
+	proxyApplied bool
 	// proxyPort is the first positive listen_port in the applied document. Zero
 	// means "not known"; the host never invents a port.
 	proxyPort int
@@ -77,17 +81,27 @@ func (s *hostServer) takeEvents() []map[string]any {
 	return out
 }
 
+// popEvent removes and returns one queued event. The C++ callback pump asks for
+// one frame at a time so it never has to parse a JSON array and can hand each
+// envelope to Flutter unchanged.
+func (s *hostServer) popEvent() map[string]any {
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	if len(s.pending) == 0 {
+		return nil
+	}
+	event := s.pending[0]
+	s.pending = s.pending[1:]
+	return event
+}
+
 func (s *hostServer) Handle(req request) response {
 	switch req.Method {
 	case "host.capabilities":
-		return ok(req.ID, map[string]any{
+		capabilities := map[string]any{
 			// core tells the app whether config.* can ever succeed in this build.
 			"core":        coreLinked,
-			"tun":         false,
-			"systemProxy": false,
 			"perAppProxy": false,
-			"autostart":   false,
-			"tray":        false,
 			"qrCamera":    false,
 			// No QR image decoder ships with the Windows host yet; claiming it would
 			// light up a dead UI entry (P4 QR strategy).
@@ -96,13 +110,24 @@ func (s *hostServer) Handle(req request) response {
 			"clipboardWatch": true,
 			"notifications":  false,
 			"deepLink":       false,
-			// Events are request/response only on this host today. The UI polls
-			// service.status; claiming event delivery would be a lie until the
-			// plugin's callback pump is implemented and tested.
-			"events":         false,
 			"memoryPressure": false,
-			"serviceModes":   []string{"proxy"},
-		})
+		}
+		for key, value := range sysCapabilities() {
+			capabilities[key] = value
+		}
+		return ok(req.ID, capabilities)
+	case "events.poll":
+		event := s.popEvent()
+		if event == nil {
+			return ok(req.ID, map[string]any{})
+		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			return fail(req.ID, &bridgeError{Code: "internal", Message: "encode event", Retryable: false})
+		}
+		// The plugin forwards this string to Flutter's callback channel, whose
+		// codec expects one JSON envelope.
+		return ok(req.ID, map[string]any{"event": encodeBase64(encoded)})
 	case "core.capabilities":
 		return ok(req.ID, s.core.Capabilities())
 	case "host.setup":
@@ -113,6 +138,7 @@ func (s *hostServer) Handle(req request) response {
 		if s.core.Running() {
 			_ = s.core.StopService()
 		}
+		s.disableProxyLocked()
 		s.sm.close(s.sm.revision + 1)
 		s.sm.runtimeReport(false, s.sm.revision)
 		s.emit("service.state", s.status())
@@ -187,6 +213,7 @@ func (s *hostServer) Handle(req request) response {
 			s.sm.failPending(stopErr.Message)
 			return fail(req.ID, stopErr)
 		}
+		s.disableProxyLocked()
 		s.sm.runtimeReport(false, revision)
 		s.emit("service.state", s.status())
 		return ok(req.ID, map[string]any{
@@ -391,10 +418,47 @@ func (s *hostServer) Handle(req request) response {
 			return fail(req.ID, err)
 		}
 		return ok(req.ID, result)
-	case "systemProxy.apply", "systemProxy.status", "app.setAutoLaunch", "tray.update":
-		// The host advertises these as false in host.capabilities; returning a
-		// success-shaped object here was the reason a dead button looked alive.
-		return fail(req.ID, errUnsupportedPlatform("Windows system integration"))
+	case "systemProxy.apply":
+		enabled := argBool(req.Args, "enabled", false)
+		port := int(argInt(req.Args, "port"))
+		if port <= 0 {
+			port = s.proxyPort
+		}
+		bypass := []string{}
+		if raw, found := req.Args["bypass"].([]any); found {
+			for _, entry := range raw {
+				if value, ok := entry.(string); ok && value != "" {
+					bypass = append(bypass, value)
+				}
+			}
+		}
+		result, err := applySystemProxy(enabled, port, bypass)
+		if err != nil {
+			return fail(req.ID, err)
+		}
+		s.proxyApplied = enabled
+		s.emit("systemProxy.changed", map[string]any{"enabled": enabled, "port": port})
+		return ok(req.ID, result)
+	case "systemProxy.status":
+		port := int(argInt(req.Args, "port"))
+		if port <= 0 {
+			port = s.proxyPort
+		}
+		return ok(req.ID, systemProxyStatus(port))
+	case "app.setAutoLaunch":
+		enabled := argBool(req.Args, "enabled", false)
+		result, err := setAutoLaunch(enabled, s.appExe)
+		if err != nil {
+			return fail(req.ID, err)
+		}
+		s.emit("autostart.changed", map[string]any{"enabled": enabled})
+		return ok(req.ID, result)
+	case "app.autoLaunchStatus":
+		return ok(req.ID, map[string]any{"enabled": autoLaunchStatus()})
+	case "tray.update":
+		// The plugin owns the actual Shell_NotifyIcon state; this branch exists
+		// for a non-Windows/tray-less client and answers truthfully as a no-op.
+		return ok(req.ID, map[string]any{"updated": false, "reason": "tray is owned by the Windows plugin"})
 	case "tun.requestPermission":
 		return fail(req.ID, errUnsupportedPlatform("TUN"))
 	case "qr.scan", "file.pickConfig", "clipboard.readCandidate":
@@ -406,6 +470,19 @@ func (s *hostServer) Handle(req request) response {
 			Retryable: false,
 		})
 	}
+}
+
+func (s *hostServer) disableProxyLocked() {
+	if !s.proxyApplied {
+		return
+	}
+	result, err := applySystemProxy(false, s.proxyPort, nil)
+	if err != nil {
+		s.emit("systemProxy.error", map[string]any{"message": err.Message})
+	} else {
+		s.emit("systemProxy.changed", result)
+	}
+	s.proxyApplied = false
 }
 
 func (s *hostServer) resolveStartProfile(args map[string]any) (appliedProfile, *bridgeError) {
