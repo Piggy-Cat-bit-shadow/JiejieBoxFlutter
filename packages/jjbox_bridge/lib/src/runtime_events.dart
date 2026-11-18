@@ -57,22 +57,23 @@ class RuntimeStatusSample {
     this.sampledAt = 0,
   });
 
-  factory RuntimeStatusSample.fromData(Map<String, Object?> data) => RuntimeStatusSample(
-    hostEpoch: _string(data['hostEpoch']),
-    serviceState: _string(data['serviceState']),
-    profileId: _string(data['profileId']),
-    profileRevision: _int(data['profileRevision']),
-    memoryBytes: _int(data['memoryBytes']),
-    goroutines: _int(data['goroutines']),
-    connectionsIn: _int(data['connectionsIn']),
-    connectionsOut: _int(data['connectionsOut']),
-    trafficAvailable: _bool(data['trafficAvailable']),
-    uplinkBytes: _int(data['uplinkBytes']),
-    downlinkBytes: _int(data['downlinkBytes']),
-    uplinkTotalBytes: _int(data['uplinkTotalBytes']),
-    downlinkTotalBytes: _int(data['downlinkTotalBytes']),
-    sampledAt: _int(data['sampledAt']),
-  );
+  factory RuntimeStatusSample.fromData(Map<String, Object?> data) =>
+      RuntimeStatusSample(
+        hostEpoch: _string(data['hostEpoch']),
+        serviceState: _string(data['serviceState']),
+        profileId: _string(data['profileId']),
+        profileRevision: _int(data['profileRevision']),
+        memoryBytes: _int(data['memoryBytes']),
+        goroutines: _int(data['goroutines']),
+        connectionsIn: _int(data['connectionsIn']),
+        connectionsOut: _int(data['connectionsOut']),
+        trafficAvailable: _bool(data['trafficAvailable']),
+        uplinkBytes: _int(data['uplinkBytes']),
+        downlinkBytes: _int(data['downlinkBytes']),
+        uplinkTotalBytes: _int(data['uplinkTotalBytes']),
+        downlinkTotalBytes: _int(data['downlinkTotalBytes']),
+        sampledAt: _int(data['sampledAt']),
+      );
 
   final String hostEpoch;
   final String serviceState;
@@ -130,9 +131,9 @@ class RuntimeGroup {
     selectable: _bool(data['selectable']),
     selected: _string(data['selected']),
     expanded: _bool(data['expanded']),
-    items: _list(
-      data['items'],
-    ).map((Object? entry) => RuntimeGroupItem.fromData(_map(entry))).toList(growable: false),
+    items: _list(data['items'])
+        .map((Object? entry) => RuntimeGroupItem.fromData(_map(entry)))
+        .toList(growable: false),
   );
 
   final String tag;
@@ -159,12 +160,13 @@ class RuntimeLogEntry {
     this.at = 0,
   });
 
-  factory RuntimeLogEntry.fromData(Map<String, Object?> data) => RuntimeLogEntry(
-    message: _string(data['message']),
-    level: _int(data['level'], 2),
-    name: _string(data['name'], 'info'),
-    at: _int(data['at']),
-  );
+  factory RuntimeLogEntry.fromData(Map<String, Object?> data) =>
+      RuntimeLogEntry(
+        message: _string(data['message']),
+        level: _int(data['level'], 2),
+        name: _string(data['name'], 'info'),
+        at: _int(data['at']),
+      );
 
   final String message;
   final int level;
@@ -206,7 +208,10 @@ class RuntimeConnectionEvent {
         outboundType: _string(data['outboundType']),
         rule: _string(data['rule']),
         protocol: _string(data['protocol']),
-        chain: _list(data['chain']).map(_string).where((String s) => s.isNotEmpty).toList(growable: false),
+        chain: _list(data['chain'])
+            .map(_string)
+            .where((String s) => s.isNotEmpty)
+            .toList(growable: false),
         createdAt: _int(data['createdAt']),
         closedAt: _int(data['closedAt']),
         uplinkTotalBytes: _int(data['uplinkTotalBytes']),
@@ -256,7 +261,9 @@ class RuntimeConnectionBatch {
         sequence: _int(data['sequence']),
         dropped: _int(data['dropped']),
         events: _list(data['events'])
-            .map((Object? entry) => RuntimeConnectionEvent.fromData(_map(entry)))
+            .map(
+              (Object? entry) => RuntimeConnectionEvent.fromData(_map(entry)),
+            )
             .toList(growable: false),
       );
 
@@ -277,11 +284,15 @@ class RuntimeModeState {
     this.available = false,
   });
 
-  factory RuntimeModeState.fromData(Map<String, Object?> data) => RuntimeModeState(
-    modes: _list(data['modes']).map(_string).where((String s) => s.isNotEmpty).toList(growable: false),
-    current: _string(data['current']),
-    available: _bool(data['available']),
-  );
+  factory RuntimeModeState.fromData(Map<String, Object?> data) =>
+      RuntimeModeState(
+        modes: _list(data['modes'])
+            .map(_string)
+            .where((String s) => s.isNotEmpty)
+            .toList(growable: false),
+        current: _string(data['current']),
+        available: _bool(data['available']),
+      );
 
   final List<String> modes;
   final String current;
@@ -290,7 +301,15 @@ class RuntimeModeState {
 
 /// A parsed runtime event: the kind plus the typed payload for that kind.
 class RuntimeEvent {
-  const RuntimeEvent._({required this.kind, this.status, this.groups, this.logs, this.connections, this.modes, this.logsCleared = false});
+  const RuntimeEvent._({
+    required this.kind,
+    this.status,
+    this.groups,
+    this.logs,
+    this.connections,
+    this.modes,
+    this.logsCleared = false,
+  });
 
   final String kind;
   final RuntimeStatusSample? status;
@@ -305,7 +324,10 @@ class RuntimeEvent {
   static RuntimeEvent? fromCallback(HostCallback callback) {
     switch (callback.type) {
       case RuntimeEventTypes.status:
-        return RuntimeEvent._(kind: callback.type, status: RuntimeStatusSample.fromData(callback.data));
+        return RuntimeEvent._(
+          kind: callback.type,
+          status: RuntimeStatusSample.fromData(callback.data),
+        );
       case RuntimeEventTypes.groups:
         return RuntimeEvent._(
           kind: callback.type,
@@ -321,9 +343,15 @@ class RuntimeEvent {
               .toList(growable: false),
         );
       case RuntimeEventTypes.connections:
-        return RuntimeEvent._(kind: callback.type, connections: RuntimeConnectionBatch.fromData(callback.data));
+        return RuntimeEvent._(
+          kind: callback.type,
+          connections: RuntimeConnectionBatch.fromData(callback.data),
+        );
       case RuntimeEventTypes.modes:
-        return RuntimeEvent._(kind: callback.type, modes: RuntimeModeState.fromData(callback.data));
+        return RuntimeEvent._(
+          kind: callback.type,
+          modes: RuntimeModeState.fromData(callback.data),
+        );
       case RuntimeEventTypes.logsCleared:
         return RuntimeEvent._(kind: callback.type, logsCleared: true);
       default:

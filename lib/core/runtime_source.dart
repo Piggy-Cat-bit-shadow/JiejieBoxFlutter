@@ -118,7 +118,8 @@ class RuntimeSource {
   }
 
   bool _applyConnections(jb.RuntimeConnectionBatch batch) {
-    if (batch.instanceId.isNotEmpty && batch.instanceId != _connectionInstance) {
+    if (batch.instanceId.isNotEmpty &&
+        batch.instanceId != _connectionInstance) {
       // A reload replaced the Box: the old instance's rows must not survive.
       _connections.clear();
       _connectionInstance = batch.instanceId;
@@ -156,10 +157,14 @@ class RuntimeSource {
       id: event.id,
       network: event.network.isEmpty ? previous.network : event.network,
       source: event.source.isEmpty ? previous.source : event.source,
-      destination: event.destination.isEmpty ? previous.destination : event.destination,
+      destination: event.destination.isEmpty
+          ? previous.destination
+          : event.destination,
       domain: event.domain.isEmpty ? previous.domain : event.domain,
       outbound: event.outbound.isEmpty ? previous.outbound : event.outbound,
-      outboundType: event.outboundType.isEmpty ? previous.outboundType : event.outboundType,
+      outboundType: event.outboundType.isEmpty
+          ? previous.outboundType
+          : event.outboundType,
       rule: event.rule.isEmpty ? previous.rule : event.rule,
       protocol: event.protocol.isEmpty ? previous.protocol : event.protocol,
       chain: event.chain.isEmpty ? previous.chain : event.chain,

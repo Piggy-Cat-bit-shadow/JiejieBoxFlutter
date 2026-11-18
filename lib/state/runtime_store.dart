@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:jjbox_bridge/jjbox_bridge.dart' as jb;
 
+import '../core/runtime_source.dart';
+
 /// Runtime view-models and the single store the UI reads.
 ///
 /// B owns the wire contract (`CONTRACTS/RUNTIME_CONTRACT.md`). Until that
@@ -302,48 +304,26 @@ class RuntimeStore extends ChangeNotifier {
 }
 
 /// The production store; every value comes from the host's runtime envelope.
+///
+/// B owns the wire contract (`RuntimeSource`). This adapter is the only place where
+/// the UI's view-models meet the typed runtime frames: unknown event types stay
+/// ignored, a missing sample keeps the previous value, and every RPC name is the
+/// host's name (group.select / mode.set / connections.close / ...), not the old
+/// A-side `runtime.*` polling names.
 class HostRuntimeStore extends RuntimeStore {
   HostRuntimeStore(this.bridge) {
     _events = bridge.events.listen((event) {
-      final callback = event.callback;
-      switch (callback.type) {
-        case 'runtime.log':
-          final line = _parseLog(callback.data);
-          if (line != null) appendLog(line);
-        case 'runtime.connections':
-          final list = _parseConnections(callback.data['items']);
-          if (list != null) setConnections(list);
-        case 'runtime.state':
-          final data = callback.data;
-          applyTraffic(
-            traffic: _parseTraffic(data),
-            memory: (data['memory'] as num?)?.toInt(),
-            mode: data['mode'] as String?,
-            modes: (data['modes'] as List<Object?>?)
-                ?.whereType<String>()
-                .toList(growable: false),
-            intranetIp: data['intranetIp'] as String?,
-            connections: (data['connections'] as num?)?.toInt(),
-          );
+      if (_source.apply(event.callback)) {
+        _syncFromSource();
       }
     });
   }
 
   final jb.HostBridge bridge;
+  final RuntimeSource _source = RuntimeSource();
   late final StreamSubscription<({jb.HostCallback callback, bool gap})> _events;
   Timer? _timer;
-
-  static const _status = 'runtime.status';
-  static const _groups = 'runtime.groups';
-  static const _select = 'runtime.select';
-  static const _urlTest = 'runtime.urlTest';
-  static const _setMode = 'runtime.setMode';
-  static const _connections = 'runtime.connections';
-  static const _close = 'runtime.closeConnection';
-  static const _closeAll = 'runtime.closeConnections';
-  static const _logs = 'runtime.logs';
-  static const _providers = 'runtime.providers';
-  static const _refreshProviders = 'runtime.refreshProviders';
+  int _lastLogCount = 0;
 
   @override
   void startPolling() {
@@ -363,13 +343,8 @@ class HostRuntimeStore extends RuntimeStore {
 
   Future<void> refreshAll() async {
     setLoading(true);
-    await Future.wait([
-      refreshStatus(),
-      refreshGroups(),
-      refreshConnections(),
-      refreshLogs(),
-      refreshProviders(),
-    ]);
+    // Runtime data is pushed by the host; this only seeds the current snapshot.
+    _syncFromSource();
     setLoading(false);
   }
 
@@ -386,189 +361,171 @@ class HostRuntimeStore extends RuntimeStore {
   }
 
   Future<void> refreshStatus() async {
-    final data = await _call(_status);
-    if (data == null) return;
-    applyTraffic(
-      traffic: _parseTraffic(data),
-      memory: (data['memory'] as num?)?.toInt(),
-      mode: data['mode'] as String?,
-      modes: (data['modes'] as List<Object?>?)?.whereType<String>().toList(
-        growable: false,
-      ),
-      intranetIp: data['intranetIp'] as String?,
-      connections: (data['connections'] as num?)?.toInt(),
-    );
+    // No polling RPC: runtime.status is an event. Keep the timer as a cheap
+    // liveness tick so a silent host surfaces as a stale UI, not fake numbers.
   }
 
   @override
-  Future<void> refreshGroups() async {
-    final data = await _call(_groups);
-    if (data == null) return;
-    final list = <ProxyGroupView>[];
-    for (final entry in (data['groups'] as List<Object?>?) ?? const []) {
-      if (entry is! Map) continue;
-      final map = entry.cast<String, Object?>();
-      final nodes = <ProxyNodeView>[];
-      for (final raw in (map['outbounds'] as List<Object?>?) ?? const []) {
-        if (raw is! Map) continue;
-        final node = raw.cast<String, Object?>();
-        nodes.add(
-          ProxyNodeView(
-            tag: node['tag'] as String? ?? '',
-            type: node['type'] as String? ?? '',
-            delay: (node['delay'] as num?)?.toInt(),
-            selected: node['selected'] == true,
-          ),
-        );
-      }
-      list.add(
-        ProxyGroupView(
-          tag: map['tag'] as String? ?? '',
-          type: map['type'] as String? ?? '',
-          nodes: nodes,
-          selected: map['selected'] as String?,
-        ),
-      );
-    }
-    applyGroups(list, current: data['current'] as String?);
-  }
+  Future<void> refreshGroups() async {}
 
   @override
   Future<void> select(String group, String tag) async {
-    final data = await _call(_select, {'group': group, 'tag': tag});
+    final data = await _call('group.select', {
+      'group': group,
+      'outbound': tag,
+      'requestId': '',
+      'expectedRevision': 0,
+    });
     if (data != null) await refreshGroups();
   }
 
   @override
   Future<void> urlTest(String group) async {
-    final data = await _call(_urlTest, {'group': group});
+    final data = await _call('group.urlTest', {'group': group});
     if (data != null) await refreshGroups();
   }
 
   @override
   Future<void> setMode(String value) async {
-    final data = await _call(_setMode, {'mode': value});
+    final data = await _call('mode.set', {'mode': value});
     if (data != null) {
       mode = value;
       notifyListeners();
     }
   }
 
-  Future<void> refreshConnections() async {
-    final data = await _call(_connections);
-    if (data == null) return;
-    setConnections(_parseConnections(data['items']) ?? const []);
-  }
+  Future<void> refreshConnections() async {}
 
   @override
   Future<void> closeConnection(String id) async {
-    await _call(_close, {'id': id});
-    await refreshConnections();
+    await _call('connections.close', {'id': id});
   }
 
   @override
   Future<void> closeAllConnections() async {
-    await _call(_closeAll);
-    await refreshConnections();
+    await _call('connections.closeAll');
   }
 
-  Future<void> refreshLogs() async {
-    final data = await _call(_logs);
-    if (data == null) return;
-    final list = <LogView>[];
-    for (final raw in (data['items'] as List<Object?>?) ?? const []) {
-      if (raw is Map) {
-        final parsed = _parseLog(raw.cast<String, Object?>());
-        if (parsed != null) list.add(parsed);
-      }
-    }
-    setLogs(list);
-  }
+  Future<void> refreshLogs() async {}
 
   @override
   Future<void> clearKernelLogs() async {
-    await _call('runtime.clearLogs');
-    clearLogs();
+    final data = await _call('logs.clear');
+    if (data != null) clearLogs();
   }
 
-  @override
   Future<void> refreshProviders() async {
-    final data = await _call(_providers);
-    if (data == null) return;
-    final list = <ProviderView>[];
-    for (final raw in (data['providers'] as List<Object?>?) ?? const []) {
-      if (raw is! Map) continue;
-      final map = raw.cast<String, Object?>();
-      list.add(
-        ProviderView(
-          name: map['name'] as String? ?? '',
-          type: map['type'] as String? ?? '',
-          vehicle: map['vehicle'] as String? ?? '',
-          nodeCount: (map['nodes'] as num?)?.toInt() ?? 0,
-          updatedAtMillis: (map['updatedAt'] as num?)?.toInt() ?? 0,
-        ),
-      );
-    }
-    setProviders(list);
+    // The kernel does not export a provider catalogue in this API version.
+    setProviders(const <ProviderView>[]);
+    providerError = 'This core does not expose a provider catalogue';
   }
 
   Future<void> refreshProvider(String name) async {
-    if (providers.isEmpty) await refreshProviders();
-    final data = await _call(_refreshProviders, {
+    final data = await _call('provider.refresh', {
       'tags': [name],
+      'timeoutMillis': 5000,
     });
     if (data == null) return;
-    await refreshProviders();
     if (data['supported'] == false) {
       providerError = 'Provider refresh is not supported by this host';
+      notifyListeners();
+    } else {
+      providerError = null;
       notifyListeners();
     }
   }
 
-  RuntimeTraffic _parseTraffic(Map<String, Object?> data) => RuntimeTraffic(
-    up: (data['up'] as num?)?.toInt() ?? traffic.up,
-    down: (data['down'] as num?)?.toInt() ?? traffic.down,
-    upTotal: (data['upTotal'] as num?)?.toInt() ?? traffic.upTotal,
-    downTotal: (data['downTotal'] as num?)?.toInt() ?? traffic.downTotal,
-  );
-
-  LogView? _parseLog(Map<String, Object?> data) {
-    final message = data['message'] as String?;
-    if (message == null) return null;
-    return LogView(
-      timeMillis: (data['time'] as num?)?.toInt() ?? 0,
-      level: (data['level'] as String? ?? 'info').toLowerCase(),
-      message: message,
-    );
-  }
-
-  List<ConnectionView>? _parseConnections(Object? raw) {
-    if (raw is! List) return null;
-    final list = <ConnectionView>[];
-    for (final entry in raw) {
-      if (entry is! Map) continue;
-      final map = entry.cast<String, Object?>();
-      list.add(
-        ConnectionView(
-          id: map['id'] as String? ?? '',
-          host: map['host'] as String? ?? map['destination'] as String? ?? '',
-          destination: map['destination'] as String? ?? '',
-          network: map['network'] as String? ?? '',
-          rule: map['rule'] as String? ?? '',
-          chain: (map['chain'] as List<Object?>?)?.join(' → ') ?? '',
-          upload: (map['upload'] as num?)?.toInt() ?? 0,
-          download: (map['download'] as num?)?.toInt() ?? 0,
-          startMillis: (map['start'] as num?)?.toInt() ?? 0,
+  void _syncFromSource() {
+    final status = _source.status;
+    if (status != null) {
+      applyTraffic(
+        traffic: RuntimeTraffic(
+          up: status.uplinkBytes,
+          down: status.downlinkBytes,
+          upTotal: status.uplinkTotalBytes,
+          downTotal: status.downlinkTotalBytes,
         ),
+        memory: status.memoryBytes,
+        connections: status.connectionsIn + status.connectionsOut,
       );
     }
-    return list;
+
+    final modeState = _source.modes;
+    if (modeState.available) {
+      applyTraffic(mode: modeState.current, modes: modeState.modes);
+    }
+
+    final runtimeGroups = _source.groups;
+    if (runtimeGroups.isNotEmpty) {
+      final groups = runtimeGroups
+          .map((group) {
+            final nodes = group.items
+                .map((item) {
+                  final delay = item.urlTestDelay;
+                  return ProxyNodeView(
+                    tag: item.tag,
+                    type: item.type,
+                    delay: delay == 0 ? null : delay,
+                    selected: group.selected == item.tag,
+                  );
+                })
+                .toList(growable: false);
+            return ProxyGroupView(
+              tag: group.tag,
+              type: group.type,
+              nodes: nodes,
+              selected: group.selected.isEmpty ? null : group.selected,
+            );
+          })
+          .toList(growable: false);
+      final selected = runtimeGroups
+          .where((group) => group.selected.isNotEmpty)
+          .map((group) => group.selected)
+          .firstOrNull;
+      applyGroups(groups, current: selected);
+    }
+
+    final runtimeLogs = _source.logs;
+    if (runtimeLogs.length != _lastLogCount) {
+      _lastLogCount = runtimeLogs.length;
+      setLogs(
+        runtimeLogs
+            .map(
+              (entry) => LogView(
+                timeMillis: entry.at,
+                level: entry.name,
+                message: entry.message,
+              ),
+            )
+            .toList(growable: false),
+      );
+    }
+
+    final runtimeConnections = _source.connections;
+    setConnections(
+      runtimeConnections
+          .map(
+            (entry) => ConnectionView(
+              id: entry.id,
+              host: entry.domain.isNotEmpty ? entry.domain : entry.destination,
+              destination: entry.destination,
+              network: entry.network,
+              rule: entry.rule,
+              chain: entry.chain.join(' > '),
+              upload: entry.uplinkTotalBytes,
+              download: entry.downlinkTotalBytes,
+              startMillis: entry.createdAt,
+            ),
+          )
+          .toList(growable: false),
+    );
   }
 
   @override
   void dispose() {
     stopPolling();
     _events.cancel();
+    _source.dispose();
     super.dispose();
   }
 }
