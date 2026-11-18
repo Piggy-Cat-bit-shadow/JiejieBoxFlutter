@@ -9,6 +9,7 @@ import 'core/core_connection.dart';
 import 'core/core_runtime.dart';
 import 'core/host_smoke.dart';
 import 'state/app_state.dart';
+import 'state/runtime_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,8 +18,10 @@ Future<void> main() async {
     exit(0);
   }
   final runtime = await createCoreRuntime();
+  final host = runtime.host;
   final state = AppState(
-    coreConnection: CoreConnection(bridge: runtime.bridge, host: runtime.host),
+    coreConnection: CoreConnection(bridge: runtime.bridge, host: host),
+    runtime: host == null ? RuntimeStore() : HostRuntimeStore(host),
   );
   unawaited(state.bootstrap());
   runApp(JiejieBoxApp(state: state));

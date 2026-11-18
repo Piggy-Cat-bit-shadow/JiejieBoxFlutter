@@ -8,6 +8,6 @@ enum ProxiesLayout { loose, standard, tight }
 
 enum ProxyCardType { loose, standard, compact }
 
-enum PageLabel { dashboard, proxies, profiles, tools }
+enum PageLabel { dashboard, proxies, connections, logs, profiles, tools }
 
 enum NavigationItemMode { mobile, desktop, more, moreFull }
