@@ -1,0 +1,39 @@
+name: closeout-c-helper
+
+# Fast macOS helper build + selftest. The helper is built from windows/core_host
+# with the libbox tag; this validates the runtime bridge on Darwin without
+# rebuilding the iOS app or the Android AAR.
+on:
+  push:
+    branches:
+      - feat/ui-closeout-c-20261118
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helper:
+    name: macOS helper selftest
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Piggy-Cat-bit-shadow/JiejieBox
+          ref: 29210fa66dc154f5f1573b08c5046d935406cfe7
+          path: kernel
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache: false
+      - name: Build helper
+        run: |
+          chmod +x tools/build_macos_helper.sh
+          tools/build_macos_helper.sh "$GITHUB_WORKSPACE/kernel" \
+            "$GITHUB_WORKSPACE/build/macos_helper/jjbox-core-helper" arm64
+      - name: Helper selftest
+        run: |
+          helper="$GITHUB_WORKSPACE/build/macos_helper/jjbox-core-helper"
+          "$helper" --selftest --data "$RUNNER_TEMP/jjbox-helper-data"
