@@ -71,7 +71,7 @@ class LogsPage extends StatelessWidget {
                 child: visible.isEmpty
                     ? Center(
                         child: Text(
-                          runtime.loading ? l10n.loading : l10n.emptyFallback,
+                          runtime.loading ? l10n.loading : l10n.nullTip(l10n.logs),
                           style: AppTextStyle.footnote.of(context),
                         ),
                       )

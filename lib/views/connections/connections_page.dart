@@ -75,7 +75,9 @@ class ConnectionsPage extends StatelessWidget {
                 child: items.isEmpty
                     ? Center(
                         child: Text(
-                          runtime.loading ? l10n.loading : l10n.emptyFallback,
+                          runtime.loading
+                              ? l10n.loading
+                              : l10n.nullTip(l10n.connections),
                           style: AppTextStyle.footnote.of(context),
                         ),
                       )
