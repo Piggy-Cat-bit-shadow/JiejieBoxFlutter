@@ -43,7 +43,9 @@ class LogsPage extends StatelessWidget {
               },
             ),
           ],
-          body: Column(
+          body: Padding(
+            padding: EdgeInsets.only(top: context.contentTopPadding),
+            child: Column(
             children: [
               SizedBox(
                 height: 56,
@@ -91,7 +93,6 @@ class LogsPage extends StatelessWidget {
                               style: AppTextStyle.footnote
                                   .of(context)
                                   .copyWith(
-                                    fontFamily: 'JetBrainsMono',
                                     color: _levelColor(context, line.level),
                                   ),
                             ),
@@ -100,6 +101,7 @@ class LogsPage extends StatelessWidget {
                       ),
               ),
             ],
+          ),
           ),
         );
       },

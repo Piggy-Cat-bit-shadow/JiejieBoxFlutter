@@ -158,22 +158,25 @@ class _MobileShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final index = _indexOf(items, state.page);
+    final mobileItems = items
+        .where((item) => item.label != PageLabel.tools)
+        .toList(growable: false);
+    final index = _indexOf(mobileItems, state.page);
     final bar = state.floatingNavigationBar
         ? NavigationDock(
             destinations: [
-              for (final item in items)
+              for (final item in mobileItems)
                 NavigationDockDestination(
                   glyph: item.glyph,
                   label: _labelOf(context, item.label),
                 ),
             ],
             selectedIndex: index,
-            onSelected: (value) => state.setPage(items[value].label),
+            onSelected: (value) => state.setPage(mobileItems[value].label),
           )
         : NavigationBar(
             destinations: [
-              for (final item in items)
+              for (final item in mobileItems)
                 NavigationDestination(
                   icon: AnimatedGlyph(
                     glyph: item.glyph,
@@ -183,7 +186,7 @@ class _MobileShell extends StatelessWidget {
                 ),
             ],
             selectedIndex: index,
-            onDestinationSelected: (value) => state.setPage(items[value].label),
+            onDestinationSelected: (value) => state.setPage(mobileItems[value].label),
           );
     return Column(
       children: [

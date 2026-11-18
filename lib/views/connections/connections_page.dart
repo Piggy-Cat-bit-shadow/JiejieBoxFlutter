@@ -42,7 +42,9 @@ class ConnectionsPage extends StatelessWidget {
                   : runtime.closeAllConnections,
             ),
           ],
-          body: Column(
+          body: Padding(
+            padding: EdgeInsets.only(top: context.contentTopPadding),
+            child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -119,6 +121,7 @@ class ConnectionsPage extends StatelessWidget {
                       ),
               ),
             ],
+          ),
           ),
         );
       },

@@ -29,7 +29,9 @@ class ProvidersPage extends StatelessWidget {
               onPressed: runtime.refreshProviders,
             ),
           ],
-          body: runtime.providers.isEmpty
+          body: Padding(
+            padding: EdgeInsets.only(top: context.contentTopPadding),
+            child: runtime.providers.isEmpty
               ? Center(
                   child: Text(
                     runtime.providerError ??
@@ -70,6 +72,7 @@ class ProvidersPage extends StatelessWidget {
                     );
                   },
                 ),
+          ),
         );
       },
     );

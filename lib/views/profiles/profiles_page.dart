@@ -12,6 +12,7 @@ import '../../ui/icons/app_glyphs.dart';
 import '../../ui/list_item.dart';
 import '../../ui/null_status_illustration.dart';
 import '../../ui/scaffold/scaffold.dart';
+import '../tools/tools_page.dart';
 import 'add_profile_menu.dart';
 
 const _infoGap = 4.0;
@@ -39,6 +40,15 @@ class ProfilesPage extends StatelessWidget {
     return Scaffold(
       title: l10n.profiles,
       actions: [
+        IconButton(
+          tooltip: l10n.tools,
+          onPressed: () => Navigator.of(context).push(
+            PageRouteBuilder(
+              pageBuilder: (_, _, _) => const ToolsPage(),
+            ),
+          ),
+          icon: const GlyphIcon(AppGlyphs.tools),
+        ),
         AddProfileMenu(
           builder: (open) => IconButton(
             tooltip: l10n.addProfile,

@@ -41,7 +41,9 @@ class ProxiesPage extends StatelessWidget {
               onPressed: runtime.refreshGroups,
             ),
           ],
-          body: Column(
+          body: Padding(
+            padding: EdgeInsets.only(top: context.contentTopPadding),
+            child: Column(
             children: [
               if (runtime.groups.isNotEmpty)
                 _GroupTabs(
@@ -129,6 +131,7 @@ class ProxiesPage extends StatelessWidget {
                       ),
               ),
             ],
+          ),
           ),
         );
       },
