@@ -46,6 +46,8 @@ jobs:
       - name: Generate project
         working-directory: ios
         run: xcodegen generate
+      - name: Disable Swift Package Manager (no Swift plugins in this app)
+        run: flutter config --no-enable-swift-package-manager
       - name: Build unsigned iOS app + extension
         run: flutter build ios --release --no-codesign
       - name: Inspect embedded extension
