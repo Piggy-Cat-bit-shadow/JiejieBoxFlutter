@@ -1,0 +1,219 @@
+name: closeout-c
+
+# Window C closeout: compile the four native platform projects on real runners.
+# macOS is the only host with Xcode; Android AAR needs the NDK; Windows needs the
+# Desktop C++ workload. None of these exist on the coordinator machine, so the
+# build evidence is produced here instead of being claimed locally.
+on:
+  push:
+    branches:
+      - feat/ui-closeout-c-20261118
+      - feat/ui-closeout-c-20261118-*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KERNEL_REPO: Piggy-Cat-bit-shadow/JiejieBox
+  KERNEL_REF: 29210fa66dc154f5f1573b08c5046d935406cfe7
+  FLUTTER_VERSION: '3.47.6'
+
+jobs:
+  windows:
+    name: Windows app + C++ plugin
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Build Windows release
+        run: flutter build windows --release
+      - name: Upload app artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            build/windows/x64/runner/Release/
+            build/windows/x64/runner/Release/*.exe
+          if-no-files-found: warn
+
+  android:
+    name: Android APK (Kotlin host)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Build debug APK
+        run: flutter build apk --debug
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn
+
+  android-aar:
+    name: Android libbox AAR
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KERNEL_REPO }}
+          ref: ${{ env.KERNEL_REF }}
+          path: kernel
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install NDK
+        run: sdkmanager "ndk;27.2.12479018" >/dev/null
+      - name: Install gomobile
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Build AAR
+        working-directory: kernel
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: |
+          go run ./cmd/internal/build_libbox -target android -platform android -android-variant main
+          find _libbox_build -maxdepth 2 -name '*.aar' -print
+      - name: Upload AAR
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libbox-aar
+          path: kernel/_libbox_build/**/*.aar
+          if-no-files-found: warn
+
+  ios:
+    name: iOS app + Packet Tunnel (unsigned)
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KERNEL_REPO }}
+          ref: ${{ env.KERNEL_REF }}
+          path: kernel
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Install gomobile
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Build Libbox.xcframework
+        working-directory: kernel
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          go mod download all
+          go run ./cmd/internal/build_libbox -target apple -platform ios
+          test -d _libbox_build/Libbox.xcframework
+      - name: Place framework
+        run: |
+          mkdir -p ios/Frameworks
+          rsync -a kernel/_libbox_build/Libbox.xcframework ios/Frameworks/
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Build unsigned iOS app + extension
+        run: flutter build ios --release --no-codesign
+      - name: Inspect embedded extension
+        run: |
+          app="build/ios/iphoneos/Runner.app"
+          ls -la "$app"
+          ls -la "$app/PlugIns" || true
+          test -d "$app/PlugIns/JjboxTunnel.appex"
+      - name: Upload app artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-app
+          path: build/ios/iphoneos/Runner.app
+          if-no-files-found: warn
+
+  macos:
+    name: macOS app + helper
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KERNEL_REPO }}
+          ref: ${{ env.KERNEL_REF }}
+          path: kernel
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Build helper
+        run: |
+          chmod +x tools/build_macos_helper.sh
+          tools/build_macos_helper.sh "$GITHUB_WORKSPACE/kernel" \
+            "$GITHUB_WORKSPACE/build/macos_helper/jjbox-core-helper" arm64
+      - name: Helper selftest
+        run: |
+          helper="$GITHUB_WORKSPACE/build/macos_helper/jjbox-core-helper"
+          "$helper" --selftest --data "$RUNNER_TEMP/jjbox-helper-data"
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Build macOS app
+        run: flutter build macos --debug
+      - name: Upload app artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: build/macos/Build/Products/Debug/*.app
+          if-no-files-found: warn
