@@ -61,7 +61,17 @@ object JjboxRuntime {
             } ?: return
             client = created
             clientClass = created.javaClass
-            runCatching { created.javaClass.getMethod("connect").invoke(created) }
+            Thread {
+                // The service socket may still be opening when Dart sends the
+                // first runtime call; retry briefly instead of giving up once.
+                for (attempt in 0 until 10) {
+                    val connected = runCatching {
+                        created.javaClass.getMethod("connect").invoke(created)
+                    }.isSuccess
+                    if (connected) return@Thread
+                    Thread.sleep(100)
+                }
+            }.start()
         }
     }
 

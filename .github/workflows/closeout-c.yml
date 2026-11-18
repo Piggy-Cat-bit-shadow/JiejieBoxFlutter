@@ -5,10 +5,6 @@ name: closeout-c
 # Desktop C++ workload. None of these exist on the coordinator machine, so the
 # build evidence is produced here instead of being claimed locally.
 on:
-  push:
-    branches:
-      - feat/ui-closeout-c-20261118
-      - feat/ui-closeout-c-20261118-*
   workflow_dispatch:
 
 permissions:
@@ -23,9 +19,21 @@ jobs:
   windows:
     name: Windows app + C++ plugin
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KERNEL_REPO }}
+          ref: ${{ env.KERNEL_REF }}
+          path: kernel
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache: false
+      - name: Build libbox-linked host
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\build_core_host_libbox.ps1 -Kernel kernel -Go go
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -37,6 +45,10 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Build Windows release
         run: flutter build windows --release
+      - name: Stage host next to the runner
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\stage_windows_host.ps1 -OutDir build\windows\x64\runner\Release
+          Test-Path build\windows\x64\runner\Release\core_host.exe
       - name: Upload app artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -119,6 +131,48 @@ jobs:
         with:
           name: libbox-aar
           path: kernel/_libbox_build/**/*.aar
+          if-no-files-found: warn
+
+  android-apk-libbox:
+    name: Android APK with libbox AAR
+    needs: android-aar
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Download libbox AAR
+        uses: actions/download-artifact@v4
+        with:
+          name: libbox-aar
+          path: aar
+      - name: Place AAR
+        run: |
+          mkdir -p android/app/libs
+          cp aar/libbox.aar android/app/libs/libbox.aar
+          ls -l android/app/libs
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Build release APK with the core linked
+        run: flutter build apk --release
+      - name: Verify the AAR classes are in the APK
+        run: |
+          unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -E 'classes.*dex' | head
+          unzip -p build/app/outputs/flutter-apk/app-release.apk classes.dex | strings | grep -m1 'io/nekohasekai/libbox/Libbox'
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-libbox
+          path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: warn
 
   ios:
@@ -213,6 +267,15 @@ jobs:
         run: flutter pub get
       - name: Build macOS app
         run: flutter build macos --debug
+      - name: Stage helper into the app bundle
+        run: |
+          app=$(ls -d build/macos/Build/Products/Debug/*.app | head -1)
+          mkdir -p "$app/Contents/Helpers"
+          cp build/macos_helper/jjbox-core-helper "$app/Contents/Helpers/jjbox-core-helper"
+          chmod +x "$app/Contents/Helpers/jjbox-core-helper"
+          codesign --force --deep --sign - "$app"
+          test -x "$app/Contents/Helpers/jjbox-core-helper"
+          codesign --verify --deep --strict "$app"
       - name: Upload app artifact
         if: always()
         uses: actions/upload-artifact@v4

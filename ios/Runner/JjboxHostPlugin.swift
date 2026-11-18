@@ -232,7 +232,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
         try runtime.setMode(mode)
         result(Self.okEnvelope(id: id, result: ["accepted": true, "mode": mode]))
       case "logs.clear":
-        try runtime.clearLogs()
+        try runtime.clearLogBuffer()
         result(Self.okEnvelope(id: id, result: ["accepted": true]))
       case "connections.close":
         guard let connectionId = args["id"] as? String, !connectionId.isEmpty else {

@@ -138,6 +138,13 @@ object JjboxCore {
         }
         commandServer = server
         commandServerClass = serverClass
+        // The CommandClient (JjboxRuntime) connects to this server's unix socket;
+        // Start() is what creates the listener.
+        try {
+            serverClass.getMethod("start").invoke(server)
+        } catch (error: InvocationTargetException) {
+            throw CoreException("core_start_failed", coreMessage(error))
+        }
         val method = serverClass.getMethod(
             "startOrReloadService",
             String::class.java,
