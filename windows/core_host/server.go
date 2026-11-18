@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +36,8 @@ type hostServer struct {
 	sm      *stateMachine
 	store   *profileStore
 	core    coreAPI
+	runtime runtimeAPI
+	epoch   string
 	seq     int64
 	eventMu sync.Mutex
 	pending []map[string]any
@@ -52,12 +56,37 @@ type hostServer struct {
 }
 
 func newHostServer(store *profileStore, core coreAPI) *hostServer {
-	return &hostServer{
+	server := &hostServer{
 		sm:    newStateMachine(false),
 		store: store,
 		core:  core,
+		epoch: newHostEpoch(),
 	}
+	// A linked core implements runtimeAPI; the default shell deliberately does not, so
+	// the absence of the interface is the capability answer the contract asks for.
+	if runtimeCore, ok := core.(runtimeAPI); ok {
+		server.runtime = runtimeCore
+		if err := runtimeCore.SubscribeRuntime(server.emitRuntime); err != nil {
+			fmt.Fprintf(os.Stderr, "runtime subscribe: %v\n", err)
+		}
+	}
+	return server
 }
+
+// emitRuntime stamps every kernel-pushed frame with this host process's epoch, so the
+// Dart side can discard frames that belong to a previous host instance.
+func (s *hostServer) emitRuntime(kind string, data map[string]any) {
+	if data == nil {
+		data = map[string]any{}
+	}
+	data["hostEpoch"] = s.epoch
+	s.emit(kind, data)
+}
+
+// maxPendingEvents bounds the event queue. A stalled UI must never grow host memory
+// without limit; when the cap is reached the oldest non-state frame is dropped, because a
+// lost service.state would leave the UI disagreeing with the host permanently.
+const maxPendingEvents = 4096
 
 // emit queues an event frame for the connection that caused it. The host has one
 // client today (the app), so per-connection delivery is enough; a broadcast hub is
@@ -65,6 +94,19 @@ func newHostServer(store *profileStore, core coreAPI) *hostServer {
 func (s *hostServer) emit(kind string, data map[string]any) {
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
+	if len(s.pending) >= maxPendingEvents {
+		dropped := false
+		for index, frame := range s.pending {
+			if frame["type"] != "service.state" {
+				s.pending = append(s.pending[:index], s.pending[index+1:]...)
+				dropped = true
+				break
+			}
+		}
+		if !dropped {
+			s.pending = s.pending[1:]
+		}
+	}
 	s.seq++
 	s.pending = append(s.pending, map[string]any{
 		"type": kind,
@@ -111,6 +153,10 @@ func (s *hostServer) Handle(req request) response {
 			"notifications":  false,
 			"deepLink":       false,
 			"memoryPressure": false,
+			// runtime tells the app whether this build streams live groups/logs/
+			// connections; hostEpoch identifies the process that produced earlier events.
+			"runtime":   s.runtime != nil,
+			"hostEpoch": s.epoch,
 		}
 		for key, value := range sysCapabilities() {
 			capabilities[key] = value
@@ -225,6 +271,83 @@ func (s *hostServer) Handle(req request) response {
 		defer s.opMu.Unlock()
 		s.syncRuntime()
 		return ok(req.ID, s.status())
+	case "runtime.ping":
+		// Cheap liveness for the runtime surface: the Dart side uses the epoch to decide
+		// whether cached frames belong to this process.
+		return ok(req.ID, map[string]any{"hostEpoch": s.epoch, "runtime": s.runtime != nil})
+	case "group.select":
+		if s.runtime == nil {
+			return fail(req.ID, errUnsupportedPlatform("runtime streaming"))
+		}
+		result, runtimeErr := s.runtime.SelectOutbound(
+			argString(req.Args, "group"),
+			argString(req.Args, "outbound"),
+			argString(req.Args, "requestId"),
+			argInt(req.Args, "expectedRevision"),
+		)
+		if runtimeErr != nil {
+			return fail(req.ID, runtimeErr)
+		}
+		return ok(req.ID, result)
+	case "group.urlTest":
+		if s.runtime == nil {
+			return fail(req.ID, errUnsupportedPlatform("runtime streaming"))
+		}
+		result, runtimeErr := s.runtime.URLTest(argString(req.Args, "group"), argString(req.Args, "outbound"))
+		if runtimeErr != nil {
+			return fail(req.ID, runtimeErr)
+		}
+		return ok(req.ID, result)
+	case "group.urlTestCancel":
+		if s.runtime == nil {
+			return fail(req.ID, errUnsupportedPlatform("runtime streaming"))
+		}
+		result, runtimeErr := s.runtime.URLTestCancel(argString(req.Args, "group"))
+		if runtimeErr != nil {
+			return fail(req.ID, runtimeErr)
+		}
+		return ok(req.ID, result)
+	case "mode.status":
+		if s.runtime == nil {
+			return ok(req.ID, map[string]any{"modes": []string{}, "current": "", "available": false})
+		}
+		result, runtimeErr := s.runtime.Modes()
+		if runtimeErr != nil {
+			return fail(req.ID, runtimeErr)
+		}
+		return ok(req.ID, result)
+	case "mode.set":
+		if s.runtime == nil {
+			return fail(req.ID, errUnsupportedPlatform("runtime streaming"))
+		}
+		result, runtimeErr := s.runtime.SetMode(argString(req.Args, "mode"))
+		if runtimeErr != nil {
+			return fail(req.ID, runtimeErr)
+		}
+		return ok(req.ID, result)
+	case "logs.clear":
+		// The host owns the log ring that feeds the UI; the kernel's own ring is separate
+		// and is not exposed for clearing. Emitting logs.cleared is the contract signal.
+		s.emit(eventLogsCleared, map[string]any{})
+		return ok(req.ID, map[string]any{"accepted": true})
+	case "connections.close":
+		if s.runtime == nil {
+			return fail(req.ID, errUnsupportedPlatform("runtime streaming"))
+		}
+		result, runtimeErr := s.runtime.CloseConnection(argString(req.Args, "id"))
+		if runtimeErr != nil {
+			return fail(req.ID, runtimeErr)
+		}
+		return ok(req.ID, result)
+	case "connections.closeAll":
+		if s.runtime == nil {
+			return fail(req.ID, errUnsupportedPlatform("runtime streaming"))
+		}
+		result, runtimeErr := s.runtime.CloseConnections()
+		if runtimeErr != nil {
+			return fail(req.ID, runtimeErr)
+		}
+		return ok(req.ID, result)
 	case "config.check":
 		content, contentErr := argContent(req.Args)
 		if contentErr != nil {
@@ -412,6 +535,14 @@ func (s *hostServer) Handle(req request) response {
 					tags = append(tags, tag)
 				}
 			}
+		}
+		if s.runtime != nil {
+			// Real path: the linked host asks the running Box through its CommandClient.
+			result, runtimeErr := s.runtime.RefreshProviders(tags, argInt(req.Args, "timeoutMillis"))
+			if runtimeErr != nil {
+				return fail(req.ID, runtimeErr)
+			}
+			return ok(req.ID, result)
 		}
 		result, err := s.core.Refresh(tags, argInt(req.Args, "timeoutMillis"))
 		if err != nil {

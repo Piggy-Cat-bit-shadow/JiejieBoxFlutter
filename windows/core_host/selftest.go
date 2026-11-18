@@ -157,6 +157,10 @@ func runSelfTest(server *hostServer) error {
 		if err := expect(!server.core.Running(), "invalid apply must not leave a service running"); err != nil {
 			return err
 		}
+		// Runtime bridge: real provider, real selector, real CommandClient.
+		if err := runRuntimeSelfTest(server, expect); err != nil {
+			return err
+		}
 	} else {
 		if err := expect(!start.OK && start.Error.Code == "unsupported_platform",
 			"unlinked host must not claim it started a service"); err != nil {

@@ -29,6 +29,9 @@ type linkedCore struct {
 	mu      sync.Mutex
 	dataDir string
 	server  *libbox.CommandServer
+	client  *libbox.CommandClient
+	handler *runtimeHandler
+	sink    eventSink
 	running bool
 }
 
@@ -164,6 +167,13 @@ func (c *linkedCore) ensureLocked() *bridgeError {
 	if err != nil {
 		return &bridgeError{Code: "core_unavailable", Message: sanitizeCoreError(err), Retryable: true}
 	}
+	// Start binds the command channel the runtime client dials. It is loopback-only
+	// (unix socket first, then 127.0.0.1) and authenticated by the per-process secret
+	// libbox keeps in its package globals; nothing is exposed off-host.
+	if err := server.Start(); err != nil {
+		server.Close()
+		return &bridgeError{Code: "core_unavailable", Message: sanitizeCoreError(err), Retryable: true}
+	}
 	c.server = server
 	return nil
 }
@@ -186,6 +196,12 @@ func (c *linkedCore) StartService(content string) *bridgeError {
 		}
 	}
 	c.running = true
+	// Attach the runtime client only after the Box runs: the client subscribes to a
+	// service, and a subscription against a stopped core would report an empty state
+	// that looks like a real one.
+	if runtimeErr := c.startRuntimeLocked(); runtimeErr != nil {
+		return runtimeErr
+	}
 	return nil
 }
 
@@ -195,6 +211,7 @@ func (c *linkedCore) StopService() *bridgeError {
 	if c.server == nil || !c.running {
 		return nil
 	}
+	c.stopRuntimeLocked()
 	if err := c.server.CloseService(); err != nil {
 		return &bridgeError{Code: "core_stop_failed", Message: sanitizeCoreError(err), Retryable: true}
 	}
