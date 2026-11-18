@@ -35,10 +35,12 @@ jobs:
       - name: Resolve packages
         run: flutter pub get
       - name: Download prebuilt Libbox
-        run: |
-          mkdir -p ios/Frameworks
-          gh run download "$FRAMEWORK_RUN" -n Libbox.xcframework -D ios/Frameworks
-          test -d ios/Frameworks/Libbox.xcframework
+        uses: actions/download-artifact@v4
+        with:
+          name: Libbox.xcframework
+          run-id: 44221339531
+          github-token: ${{ github.token }}
+          path: ios/Frameworks/Libbox.xcframework
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
