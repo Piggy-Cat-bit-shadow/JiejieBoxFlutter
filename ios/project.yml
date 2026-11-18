@@ -68,3 +68,13 @@ targets:
       - sdk: Network.framework
       - sdk: UIKit.framework
       - sdk: libresolv.tbd
+
+schemes:
+  Runner:
+    build:
+      targets:
+        Runner: all
+    run:
+      config: Debug
+    archive:
+      config: Release
