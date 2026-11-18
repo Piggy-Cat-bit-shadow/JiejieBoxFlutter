@@ -127,9 +127,20 @@ class _MobileDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = DashboardDensityScope.scaleOf(context);
     final side = dashboardMobileSideOf(MediaQuery.sizeOf(context).width);
     final cards = dashboardCards(context);
+    final mobile = <Widget>[
+      DashboardMetricCard(
+        data: cards[0],
+        radius: DashboardCorner.mobileCard,
+      ),
+      DashboardMetricCard(
+        data: _speedCard(context),
+        radius: DashboardCorner.mobileCard,
+      ),
+      for (final card in cards.skip(3))
+        DashboardMetricCard(data: card, radius: DashboardCorner.mobileCard),
+    ];
     return ListView(
       padding: EdgeInsets.fromLTRB(
         side,
@@ -138,14 +149,10 @@ class _MobileDashboard extends StatelessWidget {
         24 + context.bottomInset,
       ),
       children: [
-        for (final (index, card) in cards.take(6).indexed)
+        for (final card in mobile)
           Padding(
             padding: EdgeInsets.only(bottom: gap),
-            child: DashboardMetricCard(
-              data: card,
-              height: (index.isEven ? 176 : 152) * scale,
-              radius: DashboardCorner.mobileCard,
-            ),
+            child: card,
           ),
       ],
     );
@@ -175,19 +182,20 @@ class DashboardMetricCard extends StatelessWidget {
   const DashboardMetricCard({
     super.key,
     required this.data,
-    required this.height,
+    this.height,
     required this.radius,
   });
 
   final DashboardMetric data;
-  final double height;
+
+  /// Desktop rows are fixed height; mobile cards size to their content, as in
+  /// FlClash's mobile dashboard.
+  final double? height;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: Card(
+    final content = Card(
         radius: radius,
         onPressed: data.onTap,
         child: Padding(
@@ -232,17 +240,23 @@ class DashboardMetricCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              Expanded(
-                child: Align(
-                  alignment: AlignmentDirectional.topStart,
-                  child: data.body,
-                ),
-              ),
+              if (height != null)
+                Expanded(
+                  child: Align(
+                    alignment: AlignmentDirectional.topStart,
+                    child: data.body,
+                  ),
+                )
+              else
+                data.body,
             ],
           ),
         ),
-      ),
-    );
+      );
+    final card = content;
+    return height == null
+        ? card
+        : SizedBox(height: height, child: card);
   }
 }
 
@@ -483,3 +497,40 @@ String connectionLabel(CoreConnection connection) => switch (connection.state) {
   CoreServiceState.stopping => 'Stopping',
   CoreServiceState.failed => 'Failed',
 };
+
+
+DashboardMetric _speedCard(BuildContext context) {
+  final l10n = context.appLocalizations;
+  final runtime = AppStateScope.of(context).runtime;
+  Widget cell(String label, int rate, int total) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: ShapeDecoration(
+        color: context.colorScheme.surfaceContainerHighest,
+        shape: AppShape.all(AppCorner.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppTextStyle.footnote.of(context)),
+          const SizedBox(height: 4),
+          Text(formatRate(rate), style: AppTextStyle.title2.of(context)),
+          Text(
+            'Total ${formatBytes(total)}',
+            style: AppTextStyle.footnote.of(context),
+          ),
+        ],
+      ),
+    ),
+  );
+  return DashboardMetric(
+    title: l10n.networkSpeed,
+    body: Row(
+      spacing: 8,
+      children: [
+        cell(l10n.upload, runtime.traffic.up, runtime.traffic.upTotal),
+        cell(l10n.download, runtime.traffic.down, runtime.traffic.downTotal),
+      ],
+    ),
+  );
+}

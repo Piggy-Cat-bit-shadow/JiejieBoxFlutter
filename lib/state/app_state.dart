@@ -76,7 +76,7 @@ class AppState extends ChangeNotifier {
 
   ThemeMode themeMode = ThemeMode.system;
 
-  bool floatingNavigationBar = false;
+  bool floatingNavigationBar = true;
 
   bool sidebarExpanded = true;
 

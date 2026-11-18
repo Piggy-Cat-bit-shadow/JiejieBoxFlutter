@@ -68,10 +68,15 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(_profileColumns(tester), expectedColumns);
         final isMobile = size.width <= 600;
-        expect(
-          find.byType(NavigationBar),
-          isMobile ? findsOneWidget : findsNothing,
-        );
+        if (isMobile) {
+          expect(
+            find.byType(NavigationDock).evaluate().isNotEmpty ||
+                find.byType(NavigationBar).evaluate().isNotEmpty,
+            isTrue,
+          );
+        } else {
+          expect(find.byType(NavigationBar), findsNothing);
+        }
         expect(
           find.byType(NavigationSidebar),
           isMobile ? findsNothing : findsOneWidget,
