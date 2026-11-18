@@ -281,7 +281,7 @@ func (c *linkedCore) startRuntimeLocked() *bridgeError {
 		return nil
 	}
 	handler := newRuntimeHandler(c.sink)
-	options := &libbox.CommandClientOptions{StatusInterval: 1000}
+	options := &libbox.CommandClientOptions{StatusInterval: int64(time.Second)}
 	// A client with no commands subscribes to nothing: the control plane answers calls but
 	// no stream is opened, which is why the first runtime selftest saw no groups. Subscribe
 	// to every stream the contract covers.

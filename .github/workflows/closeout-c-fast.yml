@@ -46,15 +46,28 @@ jobs:
       - name: Generate project
         working-directory: ios
         run: xcodegen generate
-      - name: Disable Swift Package Manager (no Swift plugins in this app)
-        run: flutter config --no-enable-swift-package-manager
+      - name: Inspect generated scheme
+        run: |
+          sed -n '1,120p' ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme || true
+          grep -n 'BlueprintName\|BuildableName\|BlueprintIdentifier' ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme || true
       - name: Build unsigned iOS app + extension
         run: flutter build ios --release --no-codesign
       - name: Full Xcode diagnostics
         if: failure()
         run: |
           cd ios
-          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -B3 -A12 'does not conform\|error:' | head -120 || true
+          echo '=== native targets ==='
+          grep -n -A8 'isa = PBXNativeTarget' Runner.xcodeproj/project.pbxproj | head -80 || true
+          echo '=== scheme references ==='
+          grep -n 'BlueprintIdentifier\|BlueprintName' Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme || true
+          tar czf "$RUNNER_TEMP/xcode-project.tgz" Runner.xcodeproj
+      - name: Upload Xcode project for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcode-project
+          path: ${{ runner.temp }}/xcode-project.tgz
+          if-no-files-found: warn
       - name: Inspect embedded extension
         run: |
           app="build/ios/iphoneos/Runner.app"
