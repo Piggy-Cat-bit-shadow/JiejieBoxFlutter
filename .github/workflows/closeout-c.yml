@@ -95,9 +95,12 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Install NDK
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --install "ndk;27.2.12479018" >/dev/null
+          SDKM=/usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager
+          yes | "$SDKM" --licenses >/dev/null || true
+          "$SDKM" --install "ndk;27.2.12479018" >/dev/null
       - name: Install gomobile
         run: |
           go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
