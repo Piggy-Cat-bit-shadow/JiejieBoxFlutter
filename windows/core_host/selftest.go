@@ -54,7 +54,11 @@ func runSelfTest(server *hostServer) error {
 		return err
 	}
 	proxyOff := server.Handle(request{ID: "2c", Method: "systemProxy.apply", Args: map[string]any{"enabled": false}})
-	if err := expect(proxyOff.OK, "systemProxy.apply(false) must be a safe no-op"); err != nil {
+	if capsResult["systemProxy"] == true {
+		if err := expect(proxyOff.OK, "systemProxy.apply(false) must be a safe no-op"); err != nil {
+			return err
+		}
+	} else if err := expect(!proxyOff.OK && proxyOff.Error.Code == "unsupported_platform", "unsupported system proxy must answer unsupported_platform"); err != nil {
 		return err
 	}
 
