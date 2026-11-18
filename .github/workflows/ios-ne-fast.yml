@@ -1,0 +1,55 @@
+name: ios-ne-fast
+
+# Compile-only iteration for the NetworkExtension target. Reuses the known-good
+# Libbox.xcframework artifact instead of rebuilding the kernel on every Swift
+# edit. The release workflow (ios-ne.yml) rebuilds the framework from source.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/p7-final
+    paths:
+      - '.github/workflows/ios-ne-fast.yml'
+      - 'ios/**'
+      - 'lib/core/**'
+      - 'packages/jjbox_bridge/**'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-ios:
+    name: Fast iOS NE compile
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FRAMEWORK_RUN: '44221339531'
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Download prebuilt Libbox
+        run: |
+          gh run download "$FRAMEWORK_RUN" -n Libbox.xcframework \
+            -D ios/Frameworks/Libbox.xcframework
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.6'
+          cache: true
+
+      - name: Build unsigned app
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
