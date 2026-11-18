@@ -83,7 +83,7 @@ class _DesktopDashboard extends StatelessWidget {
     return Padding(
       padding: EdgeInsetsDirectional.fromSTEB(
         16,
-        16,
+        16 + context.appBarInset,
         24,
         24 + MediaQuery.paddingOf(context).bottom,
       ),
@@ -134,7 +134,12 @@ class _MobileDashboard extends StatelessWidget {
     final side = dashboardMobileSideOf(width);
     final cards = dashboardCards(context);
     return ListView(
-      padding: EdgeInsets.fromLTRB(side, 16, side, 24 + context.bottomInset),
+      padding: EdgeInsets.fromLTRB(
+        side,
+        16 + context.appBarInset,
+        side,
+        24 + context.bottomInset,
+      ),
       children: [
         for (final (index, card) in cards.take(6).indexed)
           Padding(
