@@ -138,6 +138,8 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+      - name: Resolve packages before XcodeGen
+        run: flutter pub get
       - name: Install gomobile
         run: |
           go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
@@ -159,8 +161,6 @@ jobs:
       - name: Generate project
         working-directory: ios
         run: xcodegen generate
-      - name: Resolve packages
-        run: flutter pub get
       - name: Build unsigned iOS app + extension
         run: flutter build ios --release --no-codesign
       - name: Inspect embedded extension
