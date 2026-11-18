@@ -286,7 +286,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
     created.protocolConfiguration = proto
     created.isEnabled = true
     try await created.saveToPreferences()
-    try try await created.loadFromPreferences()
+    try await created.loadFromPreferences()
     manager = created
     return created
   }
