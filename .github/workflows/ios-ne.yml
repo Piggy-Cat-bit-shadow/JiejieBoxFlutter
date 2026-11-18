@@ -1,0 +1,114 @@
+name: ios-ne
+
+# Builds the real libbox XCFramework and a Flutter iOS app with the Packet Tunnel
+# extension. Runtime installation still needs an Apple provisioning profile with
+# packet-tunnel-provider + App Group; this workflow proves the build/link.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/p7-final
+    paths:
+      - '.github/workflows/ios-ne.yml'
+      - 'ios/**'
+      - 'lib/core/**'
+      - 'packages/jjbox_bridge/**'
+
+permissions:
+  contents: read
+
+jobs:
+  libbox:
+    name: Libbox XCFramework
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout kernel
+        uses: actions/checkout@v4
+        with:
+          repository: Piggy-Cat-bit-shadow/JiejieBox
+          ref: 29210fa66dc154f5f1573b08c5046d935406cfe7
+          path: kernel
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache: false
+
+      - name: Install gomobile
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build Libbox.xcframework
+        working-directory: kernel
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          go mod download all
+          go run ./cmd/internal/build_libbox -target apple -platform ios
+          test -d _libbox_build/Libbox.xcframework
+
+      - name: Upload framework
+        uses: actions/upload-artifact@v4
+        with:
+          name: Libbox.xcframework
+          path: kernel/_libbox_build/Libbox.xcframework
+          if-no-files-found: error
+
+  build-ios:
+    name: iOS app + tunnel extension
+    needs: libbox
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Download Libbox
+        uses: actions/download-artifact@v4
+        with:
+          name: Libbox.xcframework
+          path: ios/Frameworks/Libbox.xcframework
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.6'
+          cache: true
+
+      - name: Build unsigned app
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          app="build/ios/iphoneos/Runner.app"
+          test -d "$app"
+          test -d "$app/PlugIns/JjboxTunnel.appex"
+          rm -rf build/ipa-ne build/Payload
+          mkdir -p build/ipa-ne/Payload
+          cp -R "$app" build/ipa-ne/Payload/Runner.app
+          (cd build/ipa-ne && ditto -c -k --sequesterRsrc --keepParent Payload ../JiejieBox-ios-ne-unsigned.ipa)
+          shasum -a 256 build/JiejieBox-ios-ne-unsigned.ipa | tee build/SHA256SUMS-ios-ne.txt
+
+      - name: Upload iOS NE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JiejieBox-ios-ne
+          path: |
+            build/JiejieBox-ios-ne-unsigned.ipa
+            build/SHA256SUMS-ios-ne.txt
+          if-no-files-found: error
+          retention-days: 14

@@ -55,3 +55,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: NetworkExtension/NetworkExtension.entitlements
         SWIFT_VERSION: "5.0"
         IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - framework: Frameworks/Libbox.xcframework
+        embed: false

@@ -352,6 +352,8 @@ class FakeHost implements HostTransport {
         };
       case BridgeMethod.appSetAutoLaunch:
         return <String, Object?>{'enabled': args['enabled'] ?? false};
+      case BridgeMethod.appAutoLaunchStatus:
+        return <String, Object?>{'enabled': false};
       case BridgeMethod.trayUpdate:
         return const <String, Object?>{};
       default:

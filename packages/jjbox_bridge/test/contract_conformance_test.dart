@@ -6,7 +6,7 @@ import 'package:jjbox_bridge/testing.dart';
 /// error code added to the JSON must arrive here in the same change.
 void main() {
   test('the method table is the contract revision', () {
-    expect(BridgeMethod.all.length, 25);
+    expect(BridgeMethod.all.length, 26);
     expect(BridgeMethod.all.toSet().length, BridgeMethod.all.length);
     final RegExp area = RegExp(r'^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$');
     for (final String method in BridgeMethod.all) {
