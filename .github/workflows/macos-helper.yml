@@ -73,12 +73,12 @@ jobs:
           mkdir -p "$app/Contents/Helpers"
           cp build/macos_helper/jjbox-core-helper \
             "$app/Contents/Helpers/jjbox-core-helper"
-          codesign --force --sign - --timestamp=none \
+          codesign --force --sign - --timestamp=none --verbose=4 \
             --entitlements macos/Runner/Helper.entitlements \
-            "$app/Contents/Helpers/jjbox-core-helper"
-          codesign --force --sign - --timestamp=none \
+            "$app/Contents/Helpers/jjbox-core-helper" 2>&1
+          codesign --force --sign - --timestamp=none --verbose=4 \
             --entitlements macos/Runner/Release.entitlements \
-            "$app"
+            "$app" 2>&1
           codesign --verify --strict --verbose=2 "$app"
           codesign --verify --strict --verbose=2 \
             "$app/Contents/Helpers/jjbox-core-helper"
