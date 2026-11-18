@@ -63,3 +63,5 @@ targets:
         embed: false
       - sdk: NetworkExtension.framework
       - sdk: Network.framework
+      - sdk: UIKit.framework
+      - sdk: libresolv.tbd
