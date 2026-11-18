@@ -23,7 +23,6 @@ targets:
     platform: iOS
     sources:
       - path: Runner
-      - path: Flutter/GeneratedPluginRegistrant.swift
     configFiles:
       Debug: Flutter/Debug.xcconfig
       Release: Flutter/Release.xcconfig
@@ -33,6 +32,7 @@ targets:
         INFOPLIST_FILE: Runner/Info.plist
         CODE_SIGN_ENTITLEMENTS: Runner/Runner.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_OBJC_BRIDGING_HEADER: Runner/Runner-Bridging-Header.h
     preBuildScripts:
       - name: Flutter build
         script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" build
