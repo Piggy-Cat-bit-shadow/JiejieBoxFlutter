@@ -68,7 +68,7 @@ jobs:
       - name: Bundle helper and ad-hoc sign
         run: |
           set -euo pipefail
-          app="build/macos/Build/Products/Release/JiejieBox.app"
+          app="build/macos/Build/Products/Release/JjiejieBox.app"
           test -d "$app"
           mkdir -p "$app/Contents/Helpers"
           cp build/macos_helper/jjbox-core-helper \
