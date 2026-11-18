@@ -209,7 +209,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
         manager.protocolConfiguration = proto
         manager.isEnabled = true
         try await manager.saveToPreferences()
-        try await manager.loadFromPreferences()
+        await manager.loadFromPreferences()
         manager.connection.startVPNTunnel(options: ["configContent": config as NSObject])
         self.manager = manager
         result(Self.okEnvelope(id: id, result: [

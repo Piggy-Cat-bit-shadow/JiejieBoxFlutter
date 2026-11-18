@@ -23,6 +23,7 @@ targets:
     platform: iOS
     sources:
       - path: Runner
+      - path: Flutter/GeneratedPluginRegistrant.swift
     configFiles:
       Debug: Flutter/Debug.xcconfig
       Release: Flutter/Release.xcconfig
