@@ -29,47 +29,50 @@ class ProvidersPage extends StatelessWidget {
               onPressed: runtime.refreshProviders,
             ),
           ],
-          body: runtime.providers.isEmpty
-              ? Center(
-                  child: Text(
-                    runtime.providerError ??
-                        (runtime.loading
-                            ? context.appLocalizations.loading
-                            : context.appLocalizations.emptyFallback),
-                    style: AppTextStyle.footnote.of(context),
-                  ),
-                )
-              : ListView.separated(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    16 + context.bottomInset,
-                  ),
-                  itemCount: runtime.providers.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final provider = runtime.providers[index];
-                    return Card(
-                      child: ListItem(
-                        leading: const GlyphIcon(AppGlyphs.layers),
-                        title: Text(provider.name),
-                        subtitle: Text(
-                          '${provider.type} · ${provider.vehicle} · '
-                          '${provider.nodeCount} nodes'
-                          '${provider.updatedAtMillis == 0 ? '' : ' · ${formatRelative(provider.updatedAtMillis)}'}',
+          body: Padding(
+            padding: EdgeInsets.only(top: context.contentTopPadding),
+            child: runtime.providers.isEmpty
+                ? Center(
+                    child: Text(
+                      runtime.providerError ??
+                          (runtime.loading
+                              ? context.appLocalizations.loading
+                              : context.appLocalizations.emptyFallback),
+                      style: AppTextStyle.footnote.of(context),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      16 + context.bottomInset,
+                    ),
+                    itemCount: runtime.providers.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final provider = runtime.providers[index];
+                      return Card(
+                        child: ListItem(
+                          leading: const GlyphIcon(AppGlyphs.layers),
+                          title: Text(provider.name),
+                          subtitle: Text(
+                            '${provider.type} · ${provider.vehicle} · '
+                            '${provider.nodeCount} nodes'
+                            '${provider.updatedAtMillis == 0 ? '' : ' · ${formatRelative(provider.updatedAtMillis)}'}',
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'Refresh',
+                            icon: const GlyphIcon(AppGlyphs.status),
+                            onPressed: runtime is HostRuntimeStore
+                                ? () => (runtime).refreshProvider(provider.name)
+                                : null,
+                          ),
                         ),
-                        trailing: IconButton(
-                          tooltip: 'Refresh',
-                          icon: const GlyphIcon(AppGlyphs.status),
-                          onPressed: runtime is HostRuntimeStore
-                              ? () => (runtime).refreshProvider(provider.name)
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
+          ),
         );
       },
     );

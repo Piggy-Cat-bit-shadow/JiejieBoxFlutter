@@ -76,9 +76,9 @@ class AppState extends ChangeNotifier {
 
   ThemeMode themeMode = ThemeMode.system;
 
-  bool floatingNavigationBar = false;
+  bool floatingNavigationBar = true;
 
-  bool sidebarExpanded = false;
+  bool sidebarExpanded = true;
 
   PageLabel page = PageLabel.profiles;
 

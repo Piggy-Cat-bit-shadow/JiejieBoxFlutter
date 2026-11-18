@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 
 import '../common/constant.dart';
+import '../common/layout.dart';
 import '../common/system.dart';
 
 /// The desktop title bar the pages render under, following FlClash
@@ -23,7 +24,10 @@ class WindowHeader extends StatelessWidget {
       color: colorScheme.surface,
       shape: Border(bottom: Divider.createBorderSide(context)),
       child: SizedBox(
-        height: kHeaderHeight,
+        height: getWindowHeaderHeight(
+          isDesktop: system.isDesktop,
+          isMacOS: system.isMacOS,
+        ),
         child: Stack(
           alignment: AlignmentDirectional.center,
           children: [

@@ -2,19 +2,21 @@ import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 
 import '../../common/context.dart';
+import '../../common/enums.dart';
 import '../../common/layout.dart';
 import '../../core/core_connection.dart';
 import '../../state/app_state.dart';
 import '../../state/runtime_store.dart';
 import '../../ui/icons/app_glyphs.dart';
 import '../../ui/scaffold/scaffold.dart';
+import '../proxies/proxies_page.dart';
 import 'dashboard_layout.dart';
 import 'dashboard_style.dart';
 
-/// Dashboard, keeping FlClash v0.9.3's card geometry (2/4 columns, three
-/// densities, 176/208/56/64/152/176 heights, 440 max column, 16/24 padding)
-/// but filling each card with the runtime store's real values instead of a
-/// title placeholder.
+/// Dashboard laid out like FlClash v0.9.3: a 2-wide status card, separate
+/// upload/download cards, a 2-wide mode strip with system-proxy/TUN switches,
+/// four quarter cards and a 2+2 bottom row. Geometry (heights, radius, 440 max
+/// column, 16/24 padding) is upstream's; values come from the runtime store.
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
@@ -22,37 +24,28 @@ class DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.appLocalizations;
     final state = AppStateScope.of(context);
-    final runtime = state.runtime;
-    final scale = textScaleOf(context);
     return Scaffold(
       title: l10n.dashboard,
       iconActions: [
         IconButtonData(
-          glyph: AppGlyphs.status,
+          glyph: AppGlyphs.verified,
           tooltip: l10n.update,
-          onPressed: runtime.refreshGroups,
+          onPressed: state.runtime.refreshGroups,
         ),
       ],
       body: AnimatedBuilder(
-        animation: Listenable.merge([state, runtime, state.connection]),
+        animation: Listenable.merge([state, state.runtime, state.connection]),
         builder: (context, _) {
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final room = constraints.biggest / scale;
-              final density = DashboardDensity.of(room);
-              return DashboardDensityScope(
-                density: density,
-                scale: scale,
-                child: density.isDesktop
-                    ? _DesktopDashboard(
-                        columns: dashboardColumnsOf(room.width),
-                        gap: cardSpacingOf(context, state.viewMode),
-                      )
-                    : _MobileDashboard(
-                        gap: cardSpacingOf(context, state.viewMode),
-                      ),
-              );
-            },
+          final room =
+              MediaQuery.sizeOf(context) /
+              MediaQuery.textScalerOf(context).scale(1);
+          final density = DashboardDensity.of(room);
+          return DashboardDensityScope(
+            density: density,
+            scale: DashboardDensityScope.scaleOf(context),
+            child: density.isDesktop
+                ? _DesktopDashboard(gap: cardSpacingOf(context, state.viewMode))
+                : _MobileDashboard(gap: cardSpacingOf(context, state.viewMode)),
           );
         },
       ),
@@ -60,13 +53,9 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-double textScaleOf(BuildContext context) =>
-    MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
-
 class _DesktopDashboard extends StatelessWidget {
-  const _DesktopDashboard({required this.columns, required this.gap});
+  const _DesktopDashboard({required this.gap});
 
-  final int columns;
   final double gap;
 
   @override
@@ -75,48 +64,56 @@ class _DesktopDashboard extends StatelessWidget {
     final compact = density.isCompact;
     final scale = DashboardDensityScope.scaleOf(context);
     final cards = dashboardCards(context);
-    final heights = <double>[
-      (compact ? 176 : 208) * scale,
-      (compact ? 56 : 64) * scale,
-      (compact ? 152 : 176) * scale,
+    final tall = (compact ? 176 : 208) * scale;
+    final control = (compact ? 56 : 64) * scale;
+    final quarter = (compact ? 152 : 176) * scale;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
+    final rows = <(double, List<(int, DashboardMetric)>)>[
+      if (wide) ...[
+        (tall, [(2, cards[0]), (1, cards[1]), (1, cards[2])]),
+        (control, [(2, cards[3]), (1, cards[4]), (1, cards[5])]),
+        (quarter, [(1, cards[6]), (1, cards[7]), (1, cards[8]), (1, cards[9])]),
+        (quarter, [(2, cards[10]), (2, cards[11])]),
+      ] else ...[
+        (tall, [(1, cards[0])]),
+        (control + 96 * scale, [(1, cards[1]), (1, cards[2])]),
+        (control, [(1, cards[3])]),
+        (control, [(1, cards[4]), (1, cards[5])]),
+        (quarter, [(1, cards[6]), (1, cards[7])]),
+        (quarter, [(1, cards[8]), (1, cards[9])]),
+        (quarter, [(1, cards[10])]),
+        (quarter, [(1, cards[11])]),
+      ],
     ];
-    return Padding(
+    return SingleChildScrollView(
       padding: EdgeInsetsDirectional.fromSTEB(
         16,
-        16 + context.appBarInset,
+        context.contentTopPadding,
         24,
-        24 + MediaQuery.paddingOf(context).bottom,
+        24 + context.bottomInset,
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final room = constraints.maxWidth - gap * (columns - 1);
-          final column = (room / columns).clamp(0.0, 440.0 * scale);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            spacing: gap,
-            children: [
-              for (var row = 0; row < 3; row++)
-                SizedBox(
-                  height: heights[row],
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    spacing: gap,
-                    children: [
-                      for (var index = 0; index < columns; index++)
-                        SizedBox(
-                          width: column,
-                          child: DashboardMetricCard(
-                            data: cards[(row * columns + index) % cards.length],
-                            height: heights[row],
-                            radius: DashboardCorner.desktopCard,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-            ],
-          );
-        },
+      child: Column(
+        spacing: gap,
+        children: [
+          for (final (height, row) in rows)
+            SizedBox(
+              height: height,
+              child: Row(
+                spacing: gap,
+                children: [
+                  for (final (flex, card) in row)
+                    Expanded(
+                      flex: flex,
+                      child: DashboardMetricCard(
+                        data: card,
+                        height: height,
+                        radius: DashboardCorner.desktopCard,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -129,26 +126,29 @@ class _MobileDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = DashboardDensityScope.scaleOf(context);
-    final width = MediaQuery.sizeOf(context).width;
-    final side = dashboardMobileSideOf(width);
+    final side = dashboardMobileSideOf(MediaQuery.sizeOf(context).width);
     final cards = dashboardCards(context);
+    final mobile = <Widget>[
+      DashboardMetricCard(data: cards[0], radius: DashboardCorner.mobileCard),
+      DashboardMetricCard(
+        data: _speedCard(context),
+        radius: DashboardCorner.mobileCard,
+      ),
+      for (final card in cards.skip(3))
+        DashboardMetricCard(data: card, radius: DashboardCorner.mobileCard),
+    ];
     return ListView(
       padding: EdgeInsets.fromLTRB(
         side,
-        16 + context.appBarInset,
+        context.contentTopPadding,
         side,
         24 + context.bottomInset,
       ),
       children: [
-        for (final (index, card) in cards.take(6).indexed)
+        for (final card in mobile)
           Padding(
             padding: EdgeInsets.only(bottom: gap),
-            child: DashboardMetricCard(
-              data: card,
-              height: (index.isEven ? 176 : 152) * scale,
-              radius: DashboardCorner.mobileCard,
-            ),
+            child: card,
           ),
       ],
     );
@@ -160,37 +160,44 @@ class DashboardMetric {
     required this.title,
     required this.body,
     this.trailing,
+    this.onTap,
+    this.compact = false,
   });
 
   final String title;
   final Widget body;
   final Widget? trailing;
+  final VoidCallback? onTap;
+
+  /// Control-row cards put the title and the value on one line (FlClash's
+  /// mode / takeover strips), so a 56/64 px row does not overflow.
+  final bool compact;
 }
 
 class DashboardMetricCard extends StatelessWidget {
   const DashboardMetricCard({
     super.key,
     required this.data,
-    required this.height,
+    this.height,
     required this.radius,
   });
 
   final DashboardMetric data;
-  final double height;
+
+  /// Desktop rows are fixed height; mobile cards size to their content, as in
+  /// FlClash's mobile dashboard.
+  final double? height;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: Card(
-        radius: radius,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    final content = Card(
+      radius: radius,
+      onPressed: data.onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: data.compact
+            ? Row(
                 children: [
                   Expanded(
                     child: Text(
@@ -204,21 +211,46 @@ class DashboardMetricCard extends StatelessWidget {
                           ),
                     ),
                   ),
+                  Flexible(child: data.body),
                   if (data.trailing != null) data.trailing!,
                 ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          data.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyle.footnote
+                              .of(context, emphasized: true)
+                              .copyWith(
+                                color: context.colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ),
+                      if (data.trailing != null) data.trailing!,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (height != null)
+                    Expanded(
+                      child: Align(
+                        alignment: AlignmentDirectional.topStart,
+                        child: data.body,
+                      ),
+                    )
+                  else
+                    data.body,
+                ],
               ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: Align(
-                  alignment: AlignmentDirectional.topStart,
-                  child: data.body,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
+    final card = content;
+    return height == null ? card : SizedBox(height: height, child: card);
   }
 }
 
@@ -227,8 +259,8 @@ List<DashboardMetric> dashboardCards(BuildContext context) {
   final state = AppStateScope.of(context);
   final runtime = state.runtime;
   final connection = state.connection;
-  final current = runtime.group;
-  final selected = current?.selected ?? runtime.currentOutbound;
+  final selected = runtime.group?.selected ?? runtime.currentOutbound;
+  final service = connectionLabel(connection);
   return [
     DashboardMetric(
       title: l10n.status,
@@ -243,7 +275,7 @@ List<DashboardMetric> dashboardCards(BuildContext context) {
           ),
           const SizedBox(height: 4),
           Text(
-            runtime.mode ?? connection.reason ?? '',
+            runtime.mode ?? controlReason(connection),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyle.footnote.of(context),
@@ -261,79 +293,48 @@ List<DashboardMetric> dashboardCards(BuildContext context) {
                   : state.startService(),
             )
           : null,
+      onTap: () => state.setPage(PageLabel.proxies),
     ),
-    DashboardMetric(
-      title: l10n.networkSpeed,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _RateRow(label: l10n.upload, value: formatRate(runtime.traffic.up)),
-          _RateRow(
-            label: l10n.download,
-            value: formatRate(runtime.traffic.down),
-          ),
-        ],
-      ),
-    ),
+    _trafficCard(context, upload: true),
+    _trafficCard(context, upload: false),
     DashboardMetric(
       title: l10n.outboundMode,
-      body: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final mode in runtime.modes)
-            TonalButton(
-              size: TonalButtonSize.section,
-              label: mode,
-              onPressed: () => runtime.setMode(mode),
+      compact: true,
+      body: runtime.modes.isEmpty
+          ? Text('—', style: AppTextStyle.body.of(context))
+          : Row(
+              spacing: 8,
+              children: [
+                for (final mode in runtime.modes.take(3))
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: TonalButton(
+                        size: TonalButtonSize.section,
+                        label: mode,
+                        onPressed: () => runtime.setMode(mode),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          if (runtime.modes.isEmpty)
-            Text('—', style: AppTextStyle.body.of(context)),
-        ],
-      ),
     ),
     DashboardMetric(
-      title: l10n.serviceStatus,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            connectionLabel(context, connection),
-            style: AppTextStyle.headline.of(context),
-          ),
-          if (connection.reason != null)
-            Text(
-              connection.reason!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyle.footnote.of(context),
-            ),
-        ],
-      ),
-    ),
-    DashboardMetric(
-      title: l10n.profile,
+      compact: true,
+      title: 'System proxy',
       body: Text(
-        state.currentProfile?.label ?? '—',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: AppTextStyle.title2.of(context),
-      ),
-    ),
-    DashboardMetric(
-      title: l10n.proxyGroup,
-      body: Text(
-        runtime.group?.selected ?? '—',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        state.systemProxyEnabled ? l10n.enabled : l10n.disabled,
         style: AppTextStyle.headline.of(context),
       ),
     ),
     DashboardMetric(
-      title: l10n.connectionStats,
+      compact: true,
+      title: 'TUN',
       body: Text(
-        '${runtime.connectionCount}',
-        style: AppTextStyle.title2.of(context),
+        connection.runtimeStatus?.tunActive == true
+            ? l10n.enabled
+            : l10n.disabled,
+        style: AppTextStyle.headline.of(context),
       ),
     ),
     DashboardMetric(
@@ -342,7 +343,33 @@ List<DashboardMetric> dashboardCards(BuildContext context) {
         runtime.intranetIp ?? '—',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        style: AppTextStyle.title2.of(context),
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.profile,
+      body: Text(
+        state.currentProfile?.label ?? '—',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: AppTextStyle.headline.of(context),
+      ),
+      onTap: () => state.setPage(PageLabel.profiles),
+    ),
+    DashboardMetric(
+      title: l10n.serviceStatus,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(service, style: AppTextStyle.headline.of(context)),
+          if (connection.reason != null)
+            Text(
+              connection.reason!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.footnote.of(context),
+            ),
+        ],
       ),
     ),
     DashboardMetric(
@@ -353,76 +380,157 @@ List<DashboardMetric> dashboardCards(BuildContext context) {
       ),
     ),
     DashboardMetric(
-      title: l10n.networkTakeover,
+      title: l10n.connectionStats,
+      body: _Counts(
+        first: runtime.connections.length,
+        second: runtime.connectionCount,
+        firstLabel: l10n.connections,
+        secondLabel: 'Recent',
+      ),
+      onTap: () => state.setPage(PageLabel.connections),
+    ),
+    DashboardMetric(
+      title: l10n.proxyGroup,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _RateRow(
-            label: 'System proxy',
-            value: state.systemProxyEnabled ? l10n.enabled : l10n.disabled,
+          Text(
+            runtime.group?.tag ?? '—',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyle.headline.of(context),
           ),
-          _RateRow(
-            label: 'Auto launch',
-            value: state.autostartEnabled ? l10n.enabled : l10n.disabled,
+          Text(
+            runtime.group?.selected ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyle.footnote.of(context),
           ),
         ],
       ),
-    ),
-    DashboardMetric(
-      title: l10n.providers,
-      body: Text(
-        '${runtime.providers.length}',
-        style: AppTextStyle.title2.of(context),
-      ),
-    ),
-    DashboardMetric(
-      title: l10n.connections,
-      body: Text(
-        '${runtime.activeCount}',
-        style: AppTextStyle.title2.of(context),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(PageRouteBuilder(pageBuilder: (_, _, _) => const ProxiesPage())),
     ),
   ];
 }
 
-class _RateRow extends StatelessWidget {
-  const _RateRow({required this.label, required this.value});
+DashboardMetric _trafficCard(BuildContext context, {required bool upload}) {
+  final l10n = context.appLocalizations;
+  final runtime = AppStateScope.of(context).runtime;
+  final value = upload ? runtime.traffic.up : runtime.traffic.down;
+  final total = upload ? runtime.traffic.upTotal : runtime.traffic.downTotal;
+  return DashboardMetric(
+    title: upload ? l10n.upload : l10n.download,
+    body: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(formatRate(value), style: AppTextStyle.title2.of(context)),
+        Text(
+          'Total ${formatBytes(total)}',
+          style: AppTextStyle.footnote.of(context),
+        ),
+      ],
+    ),
+  );
+}
 
-  final String label;
-  final String value;
+class _Counts extends StatelessWidget {
+  const _Counts({
+    required this.first,
+    required this.second,
+    required this.firstLabel,
+    required this.secondLabel,
+  });
+
+  final int first;
+  final int second;
+  final String firstLabel;
+  final String secondLabel;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyle.footnote.of(context),
-            ),
-          ),
-          Text(
-            value,
-            maxLines: 1,
-            style: AppTextStyle.footnote.of(context, emphasized: true),
-          ),
-        ],
-      ),
+    return Row(
+      children: [
+        Expanded(
+          child: _Count(value: first, label: firstLabel),
+        ),
+        Expanded(
+          child: _Count(value: second, label: secondLabel),
+        ),
+      ],
     );
   }
 }
 
-String connectionLabel(BuildContext context, CoreConnection connection) =>
-    switch (connection.state) {
-      CoreServiceState.unavailable => 'Core unavailable',
-      CoreServiceState.stopped => 'Stopped',
-      CoreServiceState.starting => 'Starting',
-      CoreServiceState.awaitingPermission => 'VPN permission needed',
-      CoreServiceState.running => 'Running',
-      CoreServiceState.stopping => 'Stopping',
-      CoreServiceState.failed => 'Failed',
-    };
+class _Count extends StatelessWidget {
+  const _Count({required this.value, required this.label});
+
+  final int value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$value', style: AppTextStyle.title2.of(context)),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyle.footnote.of(context),
+        ),
+      ],
+    );
+  }
+}
+
+String controlReason(CoreConnection connection) =>
+    connection.reason ?? connectionLabel(connection);
+
+String connectionLabel(CoreConnection connection) => switch (connection.state) {
+  CoreServiceState.unavailable => 'Core unavailable',
+  CoreServiceState.stopped => 'Stopped',
+  CoreServiceState.starting => 'Starting',
+  CoreServiceState.awaitingPermission => 'VPN permission needed',
+  CoreServiceState.running => 'Running',
+  CoreServiceState.stopping => 'Stopping',
+  CoreServiceState.failed => 'Failed',
+};
+
+DashboardMetric _speedCard(BuildContext context) {
+  final l10n = context.appLocalizations;
+  final runtime = AppStateScope.of(context).runtime;
+  Widget cell(String label, int rate, int total) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: ShapeDecoration(
+        color: context.colorScheme.surfaceContainerHighest,
+        shape: AppShape.all(AppCorner.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppTextStyle.footnote.of(context)),
+          const SizedBox(height: 4),
+          Text(formatRate(rate), style: AppTextStyle.title2.of(context)),
+          Text(
+            'Total ${formatBytes(total)}',
+            style: AppTextStyle.footnote.of(context),
+          ),
+        ],
+      ),
+    ),
+  );
+  return DashboardMetric(
+    title: l10n.networkSpeed,
+    body: Row(
+      spacing: 8,
+      children: [
+        cell(l10n.upload, runtime.traffic.up, runtime.traffic.upTotal),
+        cell(l10n.download, runtime.traffic.down, runtime.traffic.downTotal),
+      ],
+    ),
+  );
+}

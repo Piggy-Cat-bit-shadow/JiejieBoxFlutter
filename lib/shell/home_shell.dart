@@ -11,6 +11,7 @@ import '../ui/icons/app_glyphs.dart';
 import '../views/connections/connections_page.dart';
 import '../views/dashboard/dashboard_page.dart';
 import '../views/logs/logs_page.dart';
+import '../views/more/more_page.dart';
 import '../views/proxies/proxies_page.dart';
 import '../views/profiles/profiles_page.dart';
 import '../views/tools/tools_page.dart';
@@ -37,25 +38,27 @@ class HomeShell extends StatelessWidget {
   const HomeShell({super.key});
 
   List<_NavItem> _items(BuildContext context) {
+    // FlClash v0.9.3 has four primary destinations: dashboard, profiles,
+    // requests (connections/logs) and tools. Proxies and logs stay reachable
+    // from the dashboard group card and the requests page.
     return [
       _NavItem(
         PageLabel.dashboard,
         AppGlyphs.dashboard,
         (_) => const DashboardPage(),
       ),
-      _NavItem(PageLabel.proxies, AppGlyphs.layers, (_) => const ProxiesPage()),
-      _NavItem(
-        PageLabel.connections,
-        AppGlyphs.connections,
-        (_) => const ConnectionsPage(),
-      ),
-      _NavItem(PageLabel.logs, AppGlyphs.logs, (_) => const LogsPage()),
       _NavItem(
         PageLabel.profiles,
         AppGlyphs.profiles,
         (_) => const ProfilesPage(),
       ),
+      _NavItem(
+        PageLabel.connections,
+        AppGlyphs.connections,
+        (_) => const ConnectionsPage(),
+      ),
       _NavItem(PageLabel.tools, AppGlyphs.tools, (_) => const ToolsPage()),
+      _NavItem(PageLabel.more, AppGlyphs.more, (_) => const MorePage()),
     ];
   }
 
@@ -66,6 +69,7 @@ class HomeShell extends StatelessWidget {
     PageLabel.proxies => const ProxiesPage(),
     PageLabel.connections => const ConnectionsPage(),
     PageLabel.logs => const LogsPage(),
+    PageLabel.more => const MorePage(),
   };
 
   @override
@@ -111,20 +115,26 @@ class _DesktopShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktopItems = items
+        .where((item) => item.label != PageLabel.more)
+        .toList(growable: false);
     final canExpand = canExpandSidebar(state.viewMode);
     return Row(
       children: [
         NavigationSidebar(
           destinations: [
-            for (final item in items)
+            for (final item in desktopItems)
               SidebarDestination(
                 glyph: item.glyph,
                 label: _labelOf(context, item.label),
               ),
           ],
-          selectedIndex: _indexOf(items, state.page),
-          expanded: canExpand && state.sidebarExpanded,
-          onSelected: (index) => state.setPage(items[index].label),
+          selectedIndex: _indexOf(desktopItems, state.page),
+          expanded:
+              canExpand &&
+              state.sidebarExpanded &&
+              MediaQuery.sizeOf(context).width >= 1000,
+          onSelected: (index) => state.setPage(desktopItems[index].label),
           onToggle: canExpand
               ? () => state.setSidebarExpanded(!state.sidebarExpanded)
               : null,
@@ -158,22 +168,33 @@ class _MobileShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final index = _indexOf(items, state.page);
+    final mobileItems = items
+        .where(
+          (item) =>
+              item.label != PageLabel.connections &&
+              item.label != PageLabel.logs &&
+              item.label != PageLabel.more &&
+              // FlClash hides the proxies destination while no group exists.
+              (item.label != PageLabel.proxies ||
+                  state.runtime.groups.isNotEmpty),
+        )
+        .toList(growable: false);
+    final index = _indexOf(mobileItems, state.page);
     final bar = state.floatingNavigationBar
         ? NavigationDock(
             destinations: [
-              for (final item in items)
+              for (final item in mobileItems)
                 NavigationDockDestination(
                   glyph: item.glyph,
                   label: _labelOf(context, item.label),
                 ),
             ],
             selectedIndex: index,
-            onSelected: (value) => state.setPage(items[value].label),
+            onSelected: (value) => state.setPage(mobileItems[value].label),
           )
         : NavigationBar(
             destinations: [
-              for (final item in items)
+              for (final item in mobileItems)
                 NavigationDestination(
                   icon: AnimatedGlyph(
                     glyph: item.glyph,
@@ -183,7 +204,8 @@ class _MobileShell extends StatelessWidget {
                 ),
             ],
             selectedIndex: index,
-            onDestinationSelected: (value) => state.setPage(items[value].label),
+            onDestinationSelected: (value) =>
+                state.setPage(mobileItems[value].label),
           );
     return Column(
       children: [
@@ -209,6 +231,7 @@ String _labelOf(BuildContext context, PageLabel label) {
     PageLabel.proxies => l10n.proxies,
     PageLabel.connections => l10n.connections,
     PageLabel.logs => l10n.logs,
+    PageLabel.more => l10n.more,
     PageLabel.profiles => l10n.profiles,
     PageLabel.tools => l10n.tools,
   };

@@ -43,64 +43,67 @@ class LogsPage extends StatelessWidget {
               },
             ),
           ],
-          body: Column(
-            children: [
-              SizedBox(height: context.appBarInset),
-              SizedBox(
-                height: 56,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+          body: Padding(
+            padding: EdgeInsets.only(top: context.contentTopPadding),
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 56,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    itemCount: _levels.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final level = _levels[index];
+                      return TonalButton(
+                        size: TonalButtonSize.section,
+                        label: level == 'all' ? 'All' : level,
+                        onPressed: () => runtime.setLogLevel(level),
+                      );
+                    },
                   ),
-                  itemCount: _levels.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final level = _levels[index];
-                    return TonalButton(
-                      size: TonalButtonSize.section,
-                      label: level == 'all' ? 'All' : level,
-                      onPressed: () => runtime.setLogLevel(level),
-                    );
-                  },
                 ),
-              ),
-              Expanded(
-                child: visible.isEmpty
-                    ? Center(
-                        child: Text(
-                          runtime.loading ? l10n.loading : l10n.noData,
-                          style: AppTextStyle.footnote.of(context),
+                Expanded(
+                  child: visible.isEmpty
+                      ? Center(
+                          child: Text(
+                            runtime.loading
+                                ? l10n.loading
+                                : l10n.nullTip(l10n.logs),
+                            style: AppTextStyle.footnote.of(context),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            0,
+                            16,
+                            16 + context.bottomInset,
+                          ),
+                          itemCount: visible.length,
+                          itemBuilder: (context, index) {
+                            final line = visible[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                '[${_time(line.timeMillis)}] '
+                                '${line.level.toUpperCase()} ${line.message}',
+                                style: AppTextStyle.footnote
+                                    .of(context)
+                                    .copyWith(
+                                      color: _levelColor(context, line.level),
+                                    ),
+                              ),
+                            );
+                          },
                         ),
-                      )
-                    : ListView.builder(
-                        padding: EdgeInsets.fromLTRB(
-                          16,
-                          0,
-                          16,
-                          16 + context.bottomInset,
-                        ),
-                        itemCount: visible.length,
-                        itemBuilder: (context, index) {
-                          final line = visible[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Text(
-                              '[${_time(line.timeMillis)}] '
-                              '${line.level.toUpperCase()} ${line.message}',
-                              style: AppTextStyle.footnote
-                                  .of(context)
-                                  .copyWith(
-                                    fontFamily: 'JetBrainsMono',
-                                    color: _levelColor(context, line.level),
-                                  ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         );
       },
