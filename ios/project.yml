@@ -23,6 +23,7 @@ targets:
     platform: iOS
     sources:
       - path: Runner
+      - path: Runner/GeneratedPluginRegistrant.m
     configFiles:
       Debug: Flutter/Debug.xcconfig
       Release: Flutter/Release.xcconfig
@@ -46,6 +47,7 @@ targets:
         embed: true
       - framework: Frameworks/Libbox.xcframework
         embed: false
+      - sdk: libresolv.tbd
   JjboxTunnel:
     type: app-extension
     platform: iOS
