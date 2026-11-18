@@ -106,7 +106,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
     try client.setGroupExpand(group, isExpand: expanded)
   }
 
-  func clearLogs() throws {
+  func clearLogBuffer() throws {
     guard let client else { throw NSError(domain: "JiejieBox", code: 1, userInfo: [NSLocalizedDescriptionKey: "command client is not running"]) }
     try client.clearLogs()
     emit("logs.cleared", [:])
@@ -270,17 +270,8 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
   private func redact(_ message: String) -> String {
     var result = message
     for key in ["password=", "token=", "uuid="] {
-      var searchRange = result.startIndex..<result.endIndex
-      while let range = result.range(of: key, options: [.caseInsensitive], range: searchRange) {
-        let valueStart = range.upperBound
-        var valueEnd = valueStart
-        while valueEnd < result.endIndex, !" &;\t\n".contains(result[valueEnd]) {
-          valueEnd = result.index(after: valueEnd)
-        }
-        result.replaceSubrange(valueStart..<valueEnd, with: "***")
-        searchRange = valueEnd..<result.endIndex
-        if valueStart >= result.endIndex { break }
-      }
+      let pattern = "(?i)" + NSRegularExpression.escapedPattern(for: key) + "[^ &;\\t\\n]+"
+      result = result.replacingOccurrences(of: pattern, with: key + "***", options: .regularExpression)
     }
     return result
   }

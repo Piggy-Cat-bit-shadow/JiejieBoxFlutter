@@ -489,6 +489,10 @@ class JjboxPlugin : public flutter::Plugin {
       std::unique_lock<std::mutex> lock(completion_mutex_);
       completion_cv_.wait(lock, [this] { return in_flight_ == 0; });
     }
+    // A worker may have posted its completion after the last platform-thread
+    // turn; deliver everything still queued before the channel dies so no
+    // Flutter result is left hanging.
+    DrainCompletions();
     if (window_proc_delegate_id_ != 0) {
       registrar_->UnregisterTopLevelWindowProcDelegate(window_proc_delegate_id_);
     }
@@ -721,6 +725,11 @@ class JjboxPlugin : public flutter::Plugin {
       if (event.empty()) continue;
       {
         std::lock_guard<std::mutex> guard(event_mutex_);
+        // Keep the same 4096-event ceiling as the host: a slow UI must not grow
+        // this queue without bound, and the oldest event is the one to drop.
+        if (pending_events_.size() >= 4096) {
+          pending_events_.erase(pending_events_.begin());
+        }
         pending_events_.push_back(std::move(event));
       }
       HWND target = view_handle_ != nullptr ? GetAncestor(view_handle_, GA_ROOT)

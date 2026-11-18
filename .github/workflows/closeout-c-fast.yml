@@ -1,0 +1,61 @@
+name: closeout-c-fast
+
+# Fast Swift compile loop for the iOS app and the Packet Tunnel extension.
+# Reuses a known-good Libbox.xcframework produced by an earlier kernel run so a
+# Swift edit does not rebuild the whole core. The full closeout-c workflow still
+# owns the from-source kernel build and the other platforms.
+on:
+  push:
+    branches:
+      - feat/ui-closeout-c-20261118
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  FLUTTER_VERSION: '3.47.6'
+  FRAMEWORK_RUN: '44221339531'
+
+jobs:
+  ios-fast:
+    name: iOS app + extension compile (prebuilt framework)
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Download prebuilt Libbox
+        run: |
+          mkdir -p ios/Frameworks
+          gh run download "$FRAMEWORK_RUN" -n Libbox.xcframework -D ios/Frameworks
+          test -d ios/Frameworks/Libbox.xcframework
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build unsigned iOS app + extension
+        run: flutter build ios --release --no-codesign
+      - name: Inspect embedded extension
+        run: |
+          app="build/ios/iphoneos/Runner.app"
+          ls -la "$app"
+          ls -la "$app/PlugIns" || true
+          test -d "$app/PlugIns/JjboxTunnel.appex"
+      - name: Upload app artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-app
+          path: build/ios/iphoneos/Runner.app
+          if-no-files-found: warn
