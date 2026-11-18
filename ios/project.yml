@@ -43,6 +43,8 @@ targets:
     dependencies:
       - target: NetworkExtension
         embed: true
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
   NetworkExtension:
     type: app-extension
     platform: iOS

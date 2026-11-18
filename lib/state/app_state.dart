@@ -215,6 +215,15 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<String?> _readProfileText(String id) async {
+    try {
+      final profile = await connection.readProfile(id);
+      return utf8.decode(profile.content, allowMalformed: true);
+    } on Object {
+      return null;
+    }
+  }
+
   Future<bool> startService() async {
     final profile = currentProfile;
     if (profile == null) {
@@ -225,6 +234,7 @@ class AppState extends ChangeNotifier {
     final ok = await connection.start(
       profileId: profile.id,
       profileRevision: profile.revision,
+      config: await _readProfileText(profile.id),
     );
     lastActionError = ok ? null : connection.reason;
     await _syncTray();

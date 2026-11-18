@@ -149,6 +149,7 @@ class CoreConnection extends ChangeNotifier {
     String? profileId,
     String? profileRevision,
     String? mode,
+    String? config,
   }) async {
     final bridge = host;
     if (bridge != null) {
@@ -164,6 +165,7 @@ class CoreConnection extends ChangeNotifier {
           mode: resolvedMode,
           profileId: profileId,
           profileRevision: profileRevision,
+          config: config,
         );
         await refresh();
         // An accepted intent is not a running core: the state comes from

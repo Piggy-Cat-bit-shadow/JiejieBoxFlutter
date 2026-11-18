@@ -599,6 +599,7 @@ class HostBridge {
     required String profileId,
     required String profileRevision,
     String configSource = 'profile',
+    String? config,
   }) async {
     return StartAck.fromJson(
       await invoke(BridgeMethod.serviceStart, <String, Object?>{
@@ -607,6 +608,7 @@ class HostBridge {
         'configSource': configSource,
         'profileId': profileId,
         'profileRevision': profileRevision,
+        'config': ?config,
       }),
     );
   }
