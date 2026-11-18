@@ -46,6 +46,10 @@ jobs:
       - name: Generate project
         working-directory: ios
         run: xcodegen generate
+      - name: Inspect generated scheme
+        run: |
+          sed -n '1,120p' ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme || true
+          grep -n 'BlueprintName\|BuildableName\|BlueprintIdentifier' ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme || true
       - name: Disable Swift Package Manager (no Swift plugins in this app)
         run: flutter config --no-enable-swift-package-manager
       - name: Build unsigned iOS app + extension
