@@ -30,8 +30,19 @@ type runtimeHandler struct {
 	modes    []string
 	current  string
 	instance string
+	// stopping marks an intentional detach (service stop / host shutdown). The client
+	// reports Disconnected for both a stop and a lost core, and only the latter is a
+	// failure: emitting "failed" after a user-initiated stop would make the UI flash an
+	// error on every normal stop.
+	stopping bool
 
 	statusInterval time.Duration
+}
+
+func (h *runtimeHandler) markStopping() {
+	h.mu.Lock()
+	h.stopping = true
+	h.mu.Unlock()
 }
 
 func newRuntimeHandler(sink eventSink) *runtimeHandler {
@@ -47,6 +58,13 @@ func (h *runtimeHandler) emit(kind string, data map[string]any) {
 func (h *runtimeHandler) Connected() {}
 
 func (h *runtimeHandler) Disconnected(message string) {
+	h.mu.Lock()
+	stopping := h.stopping
+	h.mu.Unlock()
+	if stopping {
+		// Intentional detach: service.state already carries the authoritative lifecycle.
+		return
+	}
 	h.emit(eventRuntimeStatus, map[string]any{
 		"serviceState":     stateFailed,
 		"reason":           trimForEvent(message, 300),
@@ -286,6 +304,11 @@ func (c *linkedCore) startRuntimeLocked() *bridgeError {
 // held.
 func (c *linkedCore) stopRuntimeLocked() {
 	if c.client != nil {
+		if c.handler != nil {
+			// Mark before Disconnect: the callback runs on the client's goroutine and a
+			// stop must not be reported as a lost core.
+			c.handler.markStopping()
+		}
 		_ = c.client.Disconnect()
 		c.client = nil
 		c.handler = nil
