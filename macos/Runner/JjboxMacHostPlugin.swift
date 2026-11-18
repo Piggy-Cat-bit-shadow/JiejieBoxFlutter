@@ -39,7 +39,7 @@ final class JjboxMacHostPlugin: NSObject, FlutterPlugin {
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: "jjbox/host",
-      binaryMessenger: registrar.messenger()
+      binaryMessenger: registrar.messenger
     )
     registrar.addMethodCallDelegate(JjboxMacHostPlugin(), channel: channel)
   }
@@ -269,10 +269,10 @@ final class HelperSocketClient {
     }
     let environment = ProcessInfo.processInfo.environment["JJBOX_HELPER_SOCKET"]
     if let environment, !environment.isEmpty {
-      socketPath = environment
+      self.socketPath = environment
     } else {
       let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-      socketPath = support?
+      self.socketPath = support?
         .appendingPathComponent("JiejieBox", isDirectory: true)
         .appendingPathComponent("helper.sock")
         .path ?? "/tmp/jiejiebox-helper.sock"
