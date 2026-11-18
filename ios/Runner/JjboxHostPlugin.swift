@@ -209,7 +209,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
         manager.protocolConfiguration = proto
         manager.isEnabled = true
         try await manager.saveToPreferences()
-        await manager.loadFromPreferences()
+        try await manager.loadFromPreferences()
         manager.connection.startVPNTunnel(options: ["configContent": config as NSObject])
         self.manager = manager
         result(Self.okEnvelope(id: id, result: [
@@ -286,7 +286,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
     created.protocolConfiguration = proto
     created.isEnabled = true
     try await created.saveToPreferences()
-    try await created.loadFromPreferences()
+    try try await created.loadFromPreferences()
     manager = created
     return created
   }
