@@ -1,6 +1,6 @@
 import AppKit
 import Darwin
-import Flutter
+import FlutterMacOS
 import Foundation
 
 /// The macOS end of `jjbox/host`.
