@@ -45,6 +45,7 @@ class LogsPage extends StatelessWidget {
           ],
           body: Column(
             children: [
+              SizedBox(height: context.appBarInset),
               SizedBox(
                 height: 56,
                 child: ListView.separated(
@@ -69,7 +70,7 @@ class LogsPage extends StatelessWidget {
                 child: visible.isEmpty
                     ? Center(
                         child: Text(
-                          runtime.loading ? l10n.loading : l10n.emptyFallback,
+                          runtime.loading ? l10n.loading : l10n.noData,
                           style: AppTextStyle.footnote.of(context),
                         ),
                       )

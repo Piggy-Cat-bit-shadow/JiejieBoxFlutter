@@ -43,6 +43,7 @@ class ProxiesPage extends StatelessWidget {
           ],
           body: Column(
             children: [
+              SizedBox(height: context.appBarInset),
               if (runtime.groups.isNotEmpty)
                 _GroupTabs(
                   groups: runtime.groups,

@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+﻿import 'package:flutter/widgets.dart';
 import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 
@@ -44,6 +44,7 @@ class ConnectionsPage extends StatelessWidget {
           ],
           body: Column(
             children: [
+              SizedBox(height: context.appBarInset),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: Card(
@@ -63,7 +64,7 @@ class ConnectionsPage extends StatelessWidget {
                 child: items.isEmpty
                     ? Center(
                         child: Text(
-                          runtime.loading ? l10n.loading : l10n.emptyFallback,
+                          runtime.loading ? l10n.loading : l10n.noData,
                           style: AppTextStyle.footnote.of(context),
                         ),
                       )
@@ -92,7 +93,7 @@ class ConnectionsPage extends StatelessWidget {
                                 [
                                   if (item.rule.isNotEmpty) item.rule,
                                   if (item.chain.isNotEmpty) item.chain,
-                                ].join(' · '),
+                                ].join(' / '),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -100,10 +101,14 @@ class ConnectionsPage extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 spacing: 8,
                                 children: [
-                                  Text(
-                                    '↑${formatBytes(item.upload)} '
-                                    '↓${formatBytes(item.download)}',
-                                    style: AppTextStyle.footnote.of(context),
+                                  Flexible(
+                                    child: Text(
+                                      '${formatBytes(item.upload)} / '
+                                      '${formatBytes(item.download)}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyle.footnote.of(context),
+                                    ),
                                   ),
                                   IconButton(
                                     tooltip: l10n.closeConnection,
