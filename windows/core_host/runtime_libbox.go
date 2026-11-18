@@ -55,7 +55,11 @@ func (h *runtimeHandler) emit(kind string, data map[string]any) {
 	}
 }
 
-func (h *runtimeHandler) Connected() {}
+func (h *runtimeHandler) Connected() {
+	if os.Getenv("JJ_RT_DEBUG") != "" {
+		fmt.Fprintln(os.Stderr, "[rt] handler connected")
+	}
+}
 
 func (h *runtimeHandler) Disconnected(message string) {
 	h.mu.Lock()
@@ -117,6 +121,9 @@ func (h *runtimeHandler) WriteStatus(message *libbox.StatusMessage) {
 }
 
 func (h *runtimeHandler) WriteGroups(message libbox.OutboundGroupIterator) {
+	if os.Getenv("JJ_RT_DEBUG") != "" {
+		fmt.Fprintln(os.Stderr, "[rt] WriteGroups called")
+	}
 	groups := make([]map[string]any, 0, 8)
 	for message != nil && message.HasNext() {
 		group := message.Next()
@@ -290,6 +297,9 @@ func (c *linkedCore) startRuntimeLocked() *bridgeError {
 	options.AddCommand(libbox.CommandLog)
 	options.AddCommand(libbox.CommandClashMode)
 	options.AddCommand(libbox.CommandConnections)
+	if os.Getenv("JJ_RT_DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "[rt] connect statusInterval=%d\n", options.StatusInterval)
+	}
 	client := libbox.NewCommandClient(handler, options)
 	if err := client.Connect(); err != nil {
 		client.Disconnect()
@@ -297,6 +307,9 @@ func (c *linkedCore) startRuntimeLocked() *bridgeError {
 	}
 	c.client = client
 	c.handler = handler
+	if os.Getenv("JJ_RT_DEBUG") != "" {
+		fmt.Fprintln(os.Stderr, "[rt] command client connected")
+	}
 	return nil
 }
 
