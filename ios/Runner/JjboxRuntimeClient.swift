@@ -142,7 +142,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandlerProtocol {
     emit("runtime.disconnected", ["message": message ?? ""])
   }
 
-  @objc func initializeClashMode(_ modeList: LibboxStringIterator?, currentMode: String?) {
+  @objc func initializeClashMode(_ modeList: LibboxStringIteratorProtocol?, currentMode: String?) {
     var modes: [String] = []
     if let modeList {
       while modeList.hasNext() {
@@ -202,7 +202,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandlerProtocol {
     ])
   }
 
-  @objc func writeGroups(_ message: LibboxOutboundGroupIterator?) {
+  @objc func writeGroups(_ message: LibboxOutboundGroupIteratorProtocol?) {
     guard let message else { return }
     var groups: [[String: Any]] = []
     while message.hasNext() {
@@ -234,7 +234,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandlerProtocol {
     emit("runtime.groups", ["groups": groups])
   }
 
-  @objc func writeLogs(_ messageList: LibboxLogIterator?) {
+  @objc func writeLogs(_ messageList: LibboxLogIteratorProtocol?) {
     guard let messageList else { return }
     while messageList.hasNext() {
       guard let entry = messageList.next() else { break }
@@ -246,7 +246,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandlerProtocol {
     }
   }
 
-  @objc func writeOutbounds(_ message: LibboxOutboundGroupItemIterator?) {}
+  @objc func writeOutbounds(_ message: LibboxOutboundGroupItemIteratorProtocol?) {}
 
   @objc func writeStatus(_ message: LibboxStatusMessage?) {
     guard let message else { return }
