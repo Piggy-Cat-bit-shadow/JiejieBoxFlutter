@@ -59,3 +59,5 @@ targets:
     dependencies:
       - framework: Frameworks/Libbox.xcframework
         embed: false
+      - sdk: NetworkExtension.framework
+      - sdk: Network.framework

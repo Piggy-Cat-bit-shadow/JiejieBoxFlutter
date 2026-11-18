@@ -169,7 +169,8 @@ extension JjboxPacketTunnelProvider: LibboxPlatformInterfaceProtocol {
       var dnsServers: [String] = []
       if let iterator = try? options.getDNSServerAddress() {
         while iterator.hasNext() {
-          if let value = iterator.next(), !value.isEmpty { dnsServers.append(value) }
+          let value = iterator.next()
+          if !value.isEmpty { dnsServers.append(value) }
         }
       }
       if !dnsServers.isEmpty {
@@ -204,7 +205,7 @@ extension JjboxPacketTunnelProvider: LibboxPlatformInterfaceProtocol {
   func includeAllNetworks() -> Bool { false }
   func clearDNSCache() {}
   func readWIFIState() -> LibboxWIFIState? { nil }
-  func sendNotification(_ notification: LibboxNotification?) throws {}
+  func send(_ notification: LibboxNotification?) throws {}
   func cancelNotification(_ identifier: String?, typeID: Int32) throws {}
   func startNeighborMonitor(_ listener: LibboxNeighborUpdateListenerProtocol?) throws {}
   func closeNeighborMonitor(_ listener: LibboxNeighborUpdateListenerProtocol?) throws {}
