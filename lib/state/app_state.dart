@@ -78,7 +78,7 @@ class AppState extends ChangeNotifier {
 
   bool floatingNavigationBar = false;
 
-  bool sidebarExpanded = false;
+  bool sidebarExpanded = true;
 
   PageLabel page = PageLabel.profiles;
 

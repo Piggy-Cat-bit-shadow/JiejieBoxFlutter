@@ -37,23 +37,24 @@ class HomeShell extends StatelessWidget {
   const HomeShell({super.key});
 
   List<_NavItem> _items(BuildContext context) {
+    // FlClash v0.9.3 has four primary destinations: dashboard, profiles,
+    // requests (connections/logs) and tools. Proxies and logs stay reachable
+    // from the dashboard group card and the requests page.
     return [
       _NavItem(
         PageLabel.dashboard,
         AppGlyphs.dashboard,
         (_) => const DashboardPage(),
       ),
-      _NavItem(PageLabel.proxies, AppGlyphs.layers, (_) => const ProxiesPage()),
-      _NavItem(
-        PageLabel.connections,
-        AppGlyphs.connections,
-        (_) => const ConnectionsPage(),
-      ),
-      _NavItem(PageLabel.logs, AppGlyphs.logs, (_) => const LogsPage()),
       _NavItem(
         PageLabel.profiles,
         AppGlyphs.profiles,
         (_) => const ProfilesPage(),
+      ),
+      _NavItem(
+        PageLabel.connections,
+        AppGlyphs.connections,
+        (_) => const ConnectionsPage(),
       ),
       _NavItem(PageLabel.tools, AppGlyphs.tools, (_) => const ToolsPage()),
     ];
@@ -123,7 +124,10 @@ class _DesktopShell extends StatelessWidget {
               ),
           ],
           selectedIndex: _indexOf(items, state.page),
-          expanded: canExpand && state.sidebarExpanded,
+          expanded:
+              canExpand &&
+              state.sidebarExpanded &&
+              MediaQuery.sizeOf(context).width >= 1000,
           onSelected: (index) => state.setPage(items[index].label),
           onToggle: canExpand
               ? () => state.setSidebarExpanded(!state.sidebarExpanded)
@@ -158,9 +162,7 @@ class _MobileShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mobileItems = items
-        .where((item) => item.label != PageLabel.tools)
-        .toList(growable: false);
+    final mobileItems = items;
     final index = _indexOf(mobileItems, state.page);
     final bar = state.floatingNavigationBar
         ? NavigationDock(

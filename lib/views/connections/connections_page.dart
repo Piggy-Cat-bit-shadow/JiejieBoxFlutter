@@ -2,6 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 
+import '../../core/core_connection.dart';
+import '../logs/logs_page.dart';
+
 import '../../common/context.dart';
 import '../../state/app_state.dart';
 import '../../state/runtime_store.dart';
@@ -32,8 +35,15 @@ class ConnectionsPage extends StatelessWidget {
                   )
                   .toList(growable: false);
         return Scaffold(
-          title: l10n.connections,
+          title: _title(context),
           iconActions: [
+            IconButtonData(
+              glyph: AppGlyphs.logs,
+              tooltip: l10n.logs,
+              onPressed: () => Navigator.of(context).push(
+                PageRouteBuilder(pageBuilder: (_, _, _) => const LogsPage()),
+              ),
+            ),
             IconButtonData(
               glyph: AppGlyphs.close,
               tooltip: l10n.closeConnections,
@@ -126,5 +136,18 @@ class ConnectionsPage extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _title(BuildContext context) {
+    final state = AppStateScope.of(context).connection.state;
+    return switch (state) {
+      CoreServiceState.running => 'Running',
+      CoreServiceState.stopped => 'Stopped',
+      CoreServiceState.starting => 'Starting',
+      CoreServiceState.stopping => 'Stopping',
+      CoreServiceState.failed => 'Failed',
+      CoreServiceState.awaitingPermission => 'VPN permission needed',
+      CoreServiceState.unavailable => 'Unavailable',
+    };
   }
 }
