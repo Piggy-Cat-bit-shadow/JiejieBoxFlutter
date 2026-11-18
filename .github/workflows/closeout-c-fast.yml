@@ -50,8 +50,8 @@ jobs:
         run: |
           sed -n '1,120p' ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme || true
           grep -n 'BlueprintName\|BuildableName\|BlueprintIdentifier' ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme || true
-      - name: Disable Swift Package Manager (no Swift plugins in this app)
-        run: flutter config --no-enable-swift-package-manager
+      - name: Enable Swift Package Manager
+        run: flutter config --enable-swift-package-manager
       - name: Build unsigned iOS app + extension
         run: flutter build ios --release --no-codesign
       - name: Full Xcode diagnostics
