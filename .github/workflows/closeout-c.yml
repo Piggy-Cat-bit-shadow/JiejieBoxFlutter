@@ -178,41 +178,23 @@ jobs:
   ios:
     name: iOS app + Packet Tunnel (unsigned)
     runs-on: macos-15
-    timeout-minutes: 150
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ env.KERNEL_REPO }}
-          ref: ${{ env.KERNEL_REF }}
-          path: kernel
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.27.4'
-          cache: false
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-      - name: Resolve packages before XcodeGen
+      - name: Resolve packages
         run: flutter pub get
-      - name: Install gomobile
-        run: |
-          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
-          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Build Libbox.xcframework
-        working-directory: kernel
-        run: |
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          go mod download all
-          go run ./cmd/internal/build_libbox -target apple -platform ios
-          test -d _libbox_build/Libbox.xcframework
-      - name: Place framework
-        run: |
-          mkdir -p ios/Frameworks
-          rsync -a kernel/_libbox_build/Libbox.xcframework ios/Frameworks/
+      - name: Download the kernel-built Libbox.xcframework
+        uses: actions/download-artifact@v4
+        with:
+          name: Libbox.xcframework
+          run-id: 44221339531
+          github-token: ${{ github.token }}
+          path: ios/Frameworks/Libbox.xcframework
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
