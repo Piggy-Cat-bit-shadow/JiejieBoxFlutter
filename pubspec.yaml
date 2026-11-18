@@ -26,6 +26,12 @@ dev_dependencies:
   flutter_lints: ^6.0.0
 
 flutter:
+  config:
+    # Flutter's SPM migration hard-codes the Flutter-template Runner target id
+    # (97C146ED1CF9000F007C117D); an XcodeGen project has generated ids, so the
+    # migration aborts before xcodebuild. This app has no Swift packages, so the
+    # project explicitly keeps CocoaPods/plain Xcode builds.
+    enable-swift-package-manager: false
   uses-material-design: false
   fonts:
     - family: JetBrainsMono
