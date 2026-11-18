@@ -210,7 +210,7 @@ final class JjboxHostPlugin: NSObject, FlutterPlugin {
         manager.isEnabled = true
         try await manager.saveToPreferences()
         try await manager.loadFromPreferences()
-        manager.connection.startVPNTunnel(options: ["configContent": config as NSObject])
+        try manager.connection.startVPNTunnel(options: ["configContent": config as NSObject])
         self.manager = manager
         result(Self.okEnvelope(id: id, result: [
           "accepted": true,
