@@ -13,6 +13,7 @@ export 'src/host_channel.dart';
 export 'src/host_socket.dart';
 export 'src/import_pipeline.dart';
 export 'src/profile_transaction.dart';
+export 'src/runtime_events.dart';
 export 'src/provider_refresh.dart';
 export 'src/service_state.dart';
 export 'src/sha256.dart';
