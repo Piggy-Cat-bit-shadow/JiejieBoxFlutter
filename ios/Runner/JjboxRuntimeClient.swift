@@ -8,7 +8,7 @@ import Libbox
 /// CommandClient to the same base path and receives groups/status/connections/logs
 /// as callbacks. The callbacks are turned into the runtime contract events that
 /// the Dart bridge polls through `events.poll`.
-final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
+final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandlerProtocol {
   private let lock = NSLock()
   private var client: LibboxCommandClient?
   private var events: [String] = []
@@ -87,7 +87,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
 
   func select(group: String, outbound: String, expectedRevision: Int64) throws -> [String: Any] {
     guard let client else { throw NSError(domain: "JiejieBox", code: 1, userInfo: [NSLocalizedDescriptionKey: "command client is not running"]) }
-    let box = try client.selectOutboundWithRequest(group, outboundTag: outbound, requestID: 0, expectedRevision: expectedRevision)
+    let box = try client.selectOutbound(withRequest: group, outboundTag: outbound, requestID: 0, expectedRevision: expectedRevision)
     return jsonValue(box) ?? ["accepted": true, "group": group, "outbound": outbound]
   }
 
@@ -130,24 +130,23 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
 
   // MARK: - LibboxCommandClientHandler
 
-  func clearLogs() {
+  @objc func clearLogs() {
     emit("logs.cleared", [:])
   }
 
-  func connected() {
+  @objc func connected() {
     emit("runtime.connected", [:])
   }
 
-  func disconnected(_ message: String?) {
+  @objc func disconnected(_ message: String?) {
     emit("runtime.disconnected", ["message": message ?? ""])
   }
 
-  func initializeClashMode(_ modeList: LibboxStringIterator?, currentMode: String?) {
+  @objc func initializeClashMode(_ modeList: LibboxStringIterator?, currentMode: String?) {
     var modes: [String] = []
     if let modeList {
       while modeList.hasNext() {
-        guard let mode = modeList.next() else { break }
-        modes.append(mode)
+        modes.append(modeList.next())
       }
     }
     emit("runtime.modes", [
@@ -157,16 +156,16 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
     ])
   }
 
-  func setDefaultLogLevel(_ level: Int32) {}
+  @objc func setDefaultLogLevel(_ level: Int32) {}
 
-  func updateClashMode(_ newMode: String?) {
+  @objc func updateClashMode(_ newMode: String?) {
     emit("runtime.modes", [
       "current": newMode ?? "",
       "available": true,
     ])
   }
 
-  func writeConnectionEvents(_ events: LibboxConnectionEvents?) {
+  @objc(writeConnectionEvents:) func write(_ events: LibboxConnectionEvents?) {
     guard let events else { return }
     var records: [[String: Any]] = []
     if let iterator = events.iterator() {
@@ -187,8 +186,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
           var chain: [String] = []
           if let iterator = connection.chain() {
             while iterator.hasNext() {
-              guard let tag = iterator.next() else { break }
-              chain.append(tag)
+              chain.append(iterator.next())
             }
           }
           record["chain"] = chain
@@ -204,7 +202,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
     ])
   }
 
-  func writeGroups(_ message: LibboxOutboundGroupIterator?) {
+  @objc func writeGroups(_ message: LibboxOutboundGroupIterator?) {
     guard let message else { return }
     var groups: [[String: Any]] = []
     while message.hasNext() {
@@ -236,7 +234,7 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
     emit("runtime.groups", ["groups": groups])
   }
 
-  func writeLogs(_ messageList: LibboxLogIterator?) {
+  @objc func writeLogs(_ messageList: LibboxLogIterator?) {
     guard let messageList else { return }
     while messageList.hasNext() {
       guard let entry = messageList.next() else { break }
@@ -248,9 +246,9 @@ final class JjboxRuntimeClient: NSObject, LibboxCommandClientHandler {
     }
   }
 
-  func writeOutbounds(_ message: LibboxOutboundGroupItemIterator?) {}
+  @objc func writeOutbounds(_ message: LibboxOutboundGroupItemIterator?) {}
 
-  func writeStatus(_ message: LibboxStatusMessage?) {
+  @objc func writeStatus(_ message: LibboxStatusMessage?) {
     guard let message else { return }
     emit("runtime.status", [
       "serviceState": "running",
