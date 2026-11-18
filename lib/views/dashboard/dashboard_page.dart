@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 
@@ -7,19 +5,16 @@ import '../../common/context.dart';
 import '../../common/layout.dart';
 import '../../core/core_connection.dart';
 import '../../state/app_state.dart';
-import '../../ui/list_item.dart';
+import '../../state/runtime_store.dart';
+import '../../ui/icons/app_glyphs.dart';
 import '../../ui/scaffold/scaffold.dart';
 import 'dashboard_layout.dart';
 import 'dashboard_style.dart';
 
-/// The dashboard's layout shell, ported from FlClash v0.9.3
-/// `lib/views/dashboard/dashboard.dart` (`_DashboardViewState.build` and
-/// `_DesktopDashboard`). All geometry is upstream's: 2/4 columns, three
-/// densities, 176/208, 56/64, 152/176, 112/120 row heights, 440 max column
-/// width, 16/24/24 page padding.
-///
-/// Cards carry their real titles and no values: the runtime data arrives in A2
-/// (CONTRACTS K6-K13). Nothing here shows a simulated connected/updated state.
+/// Dashboard, keeping FlClash v0.9.3's card geometry (2/4 columns, three
+/// densities, 176/208/56/64/152/176 heights, 440 max column, 16/24 padding)
+/// but filling each card with the runtime store's real values instead of a
+/// title placeholder.
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
@@ -27,106 +22,46 @@ class DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.appLocalizations;
     final state = AppStateScope.of(context);
-    final scale = math.max(1.0, MediaQuery.textScalerOf(context).scale(1));
-    final gap = cardSpacingOf(context, state.viewMode);
+    final runtime = state.runtime;
+    final scale = textScaleOf(context);
     return Scaffold(
       title: l10n.dashboard,
-      body: Column(
-        children: [
-          const _CoreStatusStrip(),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final room = constraints.biggest / scale;
-                final density = DashboardDensity.of(room);
-                return DashboardDensityScope(
-                  density: density,
-                  scale: scale,
-                  child: density.isDesktop
-                      ? _DesktopDashboard(
-                          columns: dashboardColumnsOf(room.width),
-                          gap: gap,
-                        )
-                      : _MobileDashboard(gap: gap),
-                );
-              },
-            ),
-          ),
-        ],
+      iconActions: [
+        IconButtonData(
+          glyph: AppGlyphs.status,
+          tooltip: l10n.update,
+          onPressed: runtime.refreshGroups,
+        ),
+      ],
+      body: AnimatedBuilder(
+        animation: Listenable.merge([state, runtime, state.connection]),
+        builder: (context, _) {
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final room = constraints.biggest / scale;
+              final density = DashboardDensity.of(room);
+              return DashboardDensityScope(
+                density: density,
+                scale: scale,
+                child: density.isDesktop
+                    ? _DesktopDashboard(
+                        columns: dashboardColumnsOf(room.width),
+                        gap: cardSpacingOf(context, state.viewMode),
+                      )
+                    : _MobileDashboard(
+                        gap: cardSpacingOf(context, state.viewMode),
+                      ),
+              );
+            },
+          );
+        },
       ),
     );
   }
 }
 
-class _CoreStatusStrip extends StatelessWidget {
-  const _CoreStatusStrip();
-
-  String _label(CoreServiceState state) => switch (state) {
-    CoreServiceState.unavailable => 'Core unavailable',
-    CoreServiceState.stopped => 'Core stopped',
-    CoreServiceState.starting => 'Core starting',
-    CoreServiceState.awaitingPermission => 'VPN permission needed',
-    CoreServiceState.running => 'Core running',
-    CoreServiceState.stopping => 'Core stopping',
-    CoreServiceState.failed => 'Core failed',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final connection = AppStateScope.of(context).connection;
-    return AnimatedBuilder(
-      animation: connection,
-      builder: (context, _) {
-        final colorScheme = context.colorScheme;
-        final busy =
-            connection.state == CoreServiceState.starting ||
-            connection.state == CoreServiceState.stopping;
-        final canToggle = connection.isAvailable && !busy;
-        final label = busy
-            ? (connection.state == CoreServiceState.starting
-                  ? 'Starting…'
-                  : 'Stopping…')
-            : connection.state == CoreServiceState.running
-            ? 'Stop'
-            : connection.state == CoreServiceState.awaitingPermission
-            ? 'Grant VPN'
-            : 'Start';
-        return Padding(
-          padding: EdgeInsets.fromLTRB(16, context.contentTopPadding, 16, 0),
-          child: Card(
-            child: ListItem(
-              title: Text(
-                _label(connection.state),
-                style: AppTextStyle.subheadline.of(context, emphasized: true),
-              ),
-              trailing: connection.isAvailable
-                  ? TonalButton(
-                      size: TonalButtonSize.section,
-                      label: label,
-                      onPressed: canToggle
-                          ? () => connection.state == CoreServiceState.running
-                                ? AppStateScope.read(context).stopService()
-                                : AppStateScope.read(context).startService()
-                          : null,
-                    )
-                  : null,
-              subtitle: connection.reason == null
-                  ? null
-                  : Text(
-                      connection.reason!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyle.footnote
-                          .of(context)
-                          .copyWith(color: colorScheme.onSurfaceVariant),
-                    ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
+double textScaleOf(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0);
 
 class _DesktopDashboard extends StatelessWidget {
   const _DesktopDashboard({required this.columns, required this.gap});
@@ -139,59 +74,49 @@ class _DesktopDashboard extends StatelessWidget {
     final density = DashboardDensityScope.of(context);
     final compact = density.isCompact;
     final scale = DashboardDensityScope.scaleOf(context);
-    final base = EdgeInsetsDirectional.fromSTEB(
-      16,
-      context.contentTopPadding,
-      24,
-      24 + MediaQuery.paddingOf(context).bottom,
-    );
-    final topHeight = (compact ? 176 : 208) * scale;
-    final controlHeight = (compact ? 56 : 64) * scale;
-    final middleHeight = (compact ? 152 : 176) * scale;
-    final titles = _titles(context);
+    final cards = dashboardCards(context);
+    final heights = <double>[
+      (compact ? 176 : 208) * scale,
+      (compact ? 56 : 64) * scale,
+      (compact ? 152 : 176) * scale,
+    ];
     return Padding(
-      padding: base,
+      padding: EdgeInsetsDirectional.fromSTEB(
+        16,
+        16,
+        24,
+        24 + MediaQuery.paddingOf(context).bottom,
+      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final room = constraints.maxWidth - gap * (columns - 1);
-          final column = math.min(room / columns, 440 * scale);
+          final column = (room / columns).clamp(0.0, 440.0 * scale);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             spacing: gap,
             children: [
-              _row(context, topHeight, column, titles, 0),
-              _row(context, controlHeight, column, titles, columns),
-              _row(context, middleHeight, column, titles, columns * 2),
+              for (var row = 0; row < 3; row++)
+                SizedBox(
+                  height: heights[row],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    spacing: gap,
+                    children: [
+                      for (var index = 0; index < columns; index++)
+                        SizedBox(
+                          width: column,
+                          child: DashboardMetricCard(
+                            data: cards[(row * columns + index) % cards.length],
+                            height: heights[row],
+                            radius: DashboardCorner.desktopCard,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _row(
-    BuildContext context,
-    double height,
-    double column,
-    List<String> titles,
-    int start,
-  ) {
-    return SizedBox(
-      height: height,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: gap,
-        children: [
-          for (var index = 0; index < columns; index++)
-            SizedBox(
-              width: column,
-              child: _DashboardCard(
-                title: titles[(start + index) % titles.length],
-                height: height,
-                radius: DashboardCorner.desktopCard,
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -207,20 +132,15 @@ class _MobileDashboard extends StatelessWidget {
     final scale = DashboardDensityScope.scaleOf(context);
     final width = MediaQuery.sizeOf(context).width;
     final side = dashboardMobileSideOf(width);
-    final titles = _titles(context);
+    final cards = dashboardCards(context);
     return ListView(
-      padding: EdgeInsets.fromLTRB(
-        side,
-        context.contentTopPadding,
-        side,
-        24 + context.bottomInset,
-      ),
+      padding: EdgeInsets.fromLTRB(side, 16, side, 24 + context.bottomInset),
       children: [
-        for (final (index, title) in titles.take(6).indexed)
+        for (final (index, card) in cards.take(6).indexed)
           Padding(
             padding: EdgeInsets.only(bottom: gap),
-            child: _DashboardCard(
-              title: title,
+            child: DashboardMetricCard(
+              data: card,
               height: (index.isEven ? 176 : 152) * scale,
               radius: DashboardCorner.mobileCard,
             ),
@@ -230,36 +150,66 @@ class _MobileDashboard extends StatelessWidget {
   }
 }
 
-class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({
+class DashboardMetric {
+  const DashboardMetric({
     required this.title,
+    required this.body,
+    this.trailing,
+  });
+
+  final String title;
+  final Widget body;
+  final Widget? trailing;
+}
+
+class DashboardMetricCard extends StatelessWidget {
+  const DashboardMetricCard({
+    super.key,
+    required this.data,
     required this.height,
     required this.radius,
   });
 
-  final String title;
+  final DashboardMetric data;
   final double height;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = context.colorScheme;
     return SizedBox(
       height: height,
       child: Card(
         radius: radius,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Align(
-            alignment: AlignmentDirectional.topStart,
-            child: Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyle.footnote
-                  .of(context, emphasized: true)
-                  .copyWith(color: colorScheme.onSurfaceVariant),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      data.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyle.footnote
+                          .of(context, emphasized: true)
+                          .copyWith(
+                            color: context.colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                  if (data.trailing != null) data.trailing!,
+                ],
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.topStart,
+                  child: data.body,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -267,20 +217,207 @@ class _DashboardCard extends StatelessWidget {
   }
 }
 
-List<String> _titles(BuildContext context) {
+List<DashboardMetric> dashboardCards(BuildContext context) {
   final l10n = context.appLocalizations;
+  final state = AppStateScope.of(context);
+  final runtime = state.runtime;
+  final connection = state.connection;
+  final current = runtime.group;
+  final selected = current?.selected ?? runtime.currentOutbound;
   return [
-    l10n.status,
-    l10n.networkSpeed,
-    l10n.outboundMode,
-    l10n.serviceStatus,
-    l10n.profile,
-    l10n.proxyGroup,
-    l10n.connectionStats,
-    l10n.intranetIP,
-    l10n.memoryInfo,
-    l10n.networkTakeover,
-    l10n.profile,
-    l10n.proxyGroup,
+    DashboardMetric(
+      title: l10n.status,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            selected ?? '—',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyle.title2.of(context),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            runtime.mode ?? connection.reason ?? '',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyle.footnote.of(context),
+          ),
+        ],
+      ),
+      trailing: connection.isAvailable
+          ? TonalButton(
+              size: TonalButtonSize.section,
+              label: connection.state == CoreServiceState.running
+                  ? l10n.stop
+                  : l10n.start,
+              onPressed: () => connection.state == CoreServiceState.running
+                  ? state.stopService()
+                  : state.startService(),
+            )
+          : null,
+    ),
+    DashboardMetric(
+      title: l10n.networkSpeed,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _RateRow(label: l10n.upload, value: formatRate(runtime.traffic.up)),
+          _RateRow(
+            label: l10n.download,
+            value: formatRate(runtime.traffic.down),
+          ),
+        ],
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.outboundMode,
+      body: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final mode in runtime.modes)
+            TonalButton(
+              size: TonalButtonSize.section,
+              label: mode,
+              onPressed: () => runtime.setMode(mode),
+            ),
+          if (runtime.modes.isEmpty)
+            Text('—', style: AppTextStyle.body.of(context)),
+        ],
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.serviceStatus,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            connectionLabel(context, connection),
+            style: AppTextStyle.headline.of(context),
+          ),
+          if (connection.reason != null)
+            Text(
+              connection.reason!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.footnote.of(context),
+            ),
+        ],
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.profile,
+      body: Text(
+        state.currentProfile?.label ?? '—',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: AppTextStyle.title2.of(context),
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.proxyGroup,
+      body: Text(
+        runtime.group?.selected ?? '—',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTextStyle.headline.of(context),
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.connectionStats,
+      body: Text(
+        '${runtime.connectionCount}',
+        style: AppTextStyle.title2.of(context),
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.intranetIP,
+      body: Text(
+        runtime.intranetIp ?? '—',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTextStyle.headline.of(context),
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.memoryInfo,
+      body: Text(
+        runtime.memoryBytes == 0 ? '—' : formatBytes(runtime.memoryBytes),
+        style: AppTextStyle.title2.of(context),
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.networkTakeover,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _RateRow(
+            label: 'System proxy',
+            value: state.systemProxyEnabled ? l10n.enabled : l10n.disabled,
+          ),
+          _RateRow(
+            label: 'Auto launch',
+            value: state.autostartEnabled ? l10n.enabled : l10n.disabled,
+          ),
+        ],
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.providers,
+      body: Text(
+        '${runtime.providers.length}',
+        style: AppTextStyle.title2.of(context),
+      ),
+    ),
+    DashboardMetric(
+      title: l10n.connections,
+      body: Text(
+        '${runtime.activeCount}',
+        style: AppTextStyle.title2.of(context),
+      ),
+    ),
   ];
 }
+
+class _RateRow extends StatelessWidget {
+  const _RateRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.footnote.of(context),
+            ),
+          ),
+          Text(
+            value,
+            maxLines: 1,
+            style: AppTextStyle.footnote.of(context, emphasized: true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String connectionLabel(BuildContext context, CoreConnection connection) =>
+    switch (connection.state) {
+      CoreServiceState.unavailable => 'Core unavailable',
+      CoreServiceState.stopped => 'Stopped',
+      CoreServiceState.starting => 'Starting',
+      CoreServiceState.awaitingPermission => 'VPN permission needed',
+      CoreServiceState.running => 'Running',
+      CoreServiceState.stopping => 'Stopping',
+      CoreServiceState.failed => 'Failed',
+    };

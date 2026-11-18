@@ -10,6 +10,7 @@ import '../common/enums.dart';
 import '../common/layout.dart';
 import '../core/core_connection.dart';
 import '../features/import/import_classifier.dart';
+import 'runtime_store.dart';
 
 /// A profile row as the UI needs it; ids/revisions are the host's.
 class ProfileEntry {
@@ -39,9 +40,11 @@ class AppState extends ChangeNotifier {
   AppState({
     Size initialViewSize = Size.zero,
     CoreConnection? coreConnection,
+    RuntimeStore? runtime,
     bool seedProfiles = false,
   }) : _viewSize = initialViewSize,
-       connection = coreConnection ?? CoreConnection() {
+       connection = coreConnection ?? CoreConnection(),
+       runtime = runtime ?? RuntimeStore() {
     if (seedProfiles) {
       profiles.addAll(const [
         ProfileEntry(
@@ -52,6 +55,7 @@ class AppState extends ChangeNotifier {
         ProfileEntry(id: 'demo-2', label: 'Office', subtitle: 'remote · 6h'),
         ProfileEntry(id: 'demo-3', label: 'Travel', subtitle: 'local'),
       ]);
+      selectedProfileId = profiles.first.id;
     }
   }
 
@@ -62,6 +66,11 @@ class AppState extends ChangeNotifier {
   bool get isMobileView => viewMode == ViewMode.mobile;
 
   final CoreConnection connection;
+
+  /// Runtime data (groups, connections, logs, modes, providers). Its only
+  /// production implementation talks to the host bridge; tests inject a seeded
+  /// store. Pages never invent values.
+  final RuntimeStore runtime;
 
   double textScale = 1.0;
 
@@ -623,6 +632,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    runtime.dispose();
     connection.dispose();
     super.dispose();
   }
@@ -728,6 +738,28 @@ String? composeImportedConfig(
       proxy?['tag'] ?? (outbounds.isNotEmpty ? outbounds.first['tag'] : null);
   final directTag = tags.contains('direct') ? 'direct-out' : 'direct';
   outbounds.add(<String, Object?>{'type': 'direct', 'tag': directTag});
+  // One manageable selector for a multi-node import: the kernel owns the
+  // group, the proxies page selects inside it. A single node stays the final
+  // outbound and needs no extra indirection.
+  final proxyTags = <String>[
+    for (final node in outbounds)
+      if (node['type'] != 'direct' && node['tag'] is String)
+        node['tag']! as String,
+  ];
+  var finalTag = runner ?? directTag;
+  if (proxyTags.length > 1) {
+    var selectorTag = 'proxy';
+    while (tags.contains(selectorTag)) {
+      selectorTag = '$selectorTag-group';
+    }
+    outbounds.add(<String, Object?>{
+      'type': 'selector',
+      'tag': selectorTag,
+      'outbounds': proxyTags,
+      'default': runner ?? proxyTags.first,
+    });
+    finalTag = selectorTag;
+  }
   final config = <String, Object?>{
     'log': <String, Object?>{'level': 'info'},
     'inbounds': <Object?>[
@@ -750,7 +782,7 @@ String? composeImportedConfig(
     ],
     'outbounds': outbounds,
     if (endpoints.isNotEmpty) 'endpoints': endpoints,
-    'route': <String, Object?>{'final': runner ?? directTag},
+    'route': <String, Object?>{'final': finalTag},
   };
   return jsonEncode(config);
 }

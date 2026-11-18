@@ -74,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.textContaining('Platform bridge is not connected'),
-      findsOneWidget,
+      findsWidgets,
     );
     expect(find.text('Start'), findsNothing);
     expect(find.text('Core unavailable'), findsOneWidget);

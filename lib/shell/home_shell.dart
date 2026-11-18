@@ -8,9 +8,10 @@ import '../common/layout.dart';
 import '../common/system.dart';
 import '../state/app_state.dart';
 import '../ui/icons/app_glyphs.dart';
-import '../ui/null_status_illustration.dart';
-import '../ui/scaffold/scaffold.dart';
+import '../views/connections/connections_page.dart';
 import '../views/dashboard/dashboard_page.dart';
+import '../views/logs/logs_page.dart';
+import '../views/proxies/proxies_page.dart';
 import '../views/profiles/profiles_page.dart';
 import '../views/tools/tools_page.dart';
 import 'window_header.dart';
@@ -42,6 +43,13 @@ class HomeShell extends StatelessWidget {
         AppGlyphs.dashboard,
         (_) => const DashboardPage(),
       ),
+      _NavItem(PageLabel.proxies, AppGlyphs.layers, (_) => const ProxiesPage()),
+      _NavItem(
+        PageLabel.connections,
+        AppGlyphs.connections,
+        (_) => const ConnectionsPage(),
+      ),
+      _NavItem(PageLabel.logs, AppGlyphs.logs, (_) => const LogsPage()),
       _NavItem(
         PageLabel.profiles,
         AppGlyphs.profiles,
@@ -55,7 +63,9 @@ class HomeShell extends StatelessWidget {
     PageLabel.profiles => const ProfilesPage(),
     PageLabel.tools => const ToolsPage(),
     PageLabel.dashboard => const DashboardPage(),
-    PageLabel.proxies => const _MissingPage(title: 'Proxies'),
+    PageLabel.proxies => const ProxiesPage(),
+    PageLabel.connections => const ConnectionsPage(),
+    PageLabel.logs => const LogsPage(),
   };
 
   @override
@@ -109,11 +119,7 @@ class _DesktopShell extends StatelessWidget {
             for (final item in items)
               SidebarDestination(
                 glyph: item.glyph,
-                label: item.label == PageLabel.dashboard
-                    ? context.appLocalizations.dashboard
-                    : item.label == PageLabel.profiles
-                    ? context.appLocalizations.profiles
-                    : context.appLocalizations.tools,
+                label: _labelOf(context, item.label),
               ),
           ],
           selectedIndex: _indexOf(items, state.page),
@@ -201,6 +207,8 @@ String _labelOf(BuildContext context, PageLabel label) {
   return switch (label) {
     PageLabel.dashboard => l10n.dashboard,
     PageLabel.proxies => l10n.proxies,
+    PageLabel.connections => l10n.connections,
+    PageLabel.logs => l10n.logs,
     PageLabel.profiles => l10n.profiles,
     PageLabel.tools => l10n.tools,
   };
@@ -213,24 +221,3 @@ int _indexOf(List<_NavItem> items, PageLabel label) {
 
 /// A page whose data layer has not landed yet. It renders the real page shell
 /// and says so; it never shows a simulated "connected" or "updated" state.
-class _MissingPage extends StatelessWidget {
-  const _MissingPage({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      title: title,
-      body: NullStatusSwitcher(
-        isEmpty: true,
-        nullStatus: NullStatus(
-          label: title,
-          description: '数据面在 A2 接入',
-          illustration: NullStatusIllustration.profile,
-        ),
-        child: const SizedBox.shrink(),
-      ),
-    );
-  }
-}

@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 
+import '../providers/providers_page.dart';
+
 import '../../common/context.dart';
 import '../../state/app_state.dart';
 import '../../ui/icons/app_glyphs.dart';
@@ -128,6 +130,14 @@ class ToolsPage extends StatelessWidget {
                 style: trailingStyle,
               ),
               onTap: () => state.refreshProviders(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: ListItem.open(
+              leading: const GlyphIcon(AppGlyphs.layers),
+              title: Text(l10n.providers),
+              widget: const ProvidersPage(),
             ),
           ),
           const SizedBox(height: 16),
