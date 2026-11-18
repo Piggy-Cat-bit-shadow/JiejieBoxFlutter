@@ -313,10 +313,13 @@ List<DashboardMetric> dashboardCards(BuildContext context) {
               children: [
                 for (final mode in runtime.modes.take(3))
                   Expanded(
-                    child: TonalButton(
-                      size: TonalButtonSize.section,
-                      label: mode,
-                      onPressed: () => runtime.setMode(mode),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: TonalButton(
+                        size: TonalButtonSize.section,
+                        label: mode,
+                        onPressed: () => runtime.setMode(mode),
+                      ),
                     ),
                   ),
               ],
